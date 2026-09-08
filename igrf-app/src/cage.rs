@@ -42,7 +42,7 @@ impl Default for CageView {
 /// Draws the cage. `drive` is each axis output normalised to -1..=1, so the
 /// dashes carry sign and magnitude rather than raw controller units.
 pub fn show(ui: &mut egui::Ui, view: &mut CageView, drive: [f64; 3]) {
-    let size = ui.available_width().clamp(160.0, 420.0);
+    let size = ui.available_width().clamp(160.0, 260.0);
     let (response, painter) = ui.allocate_painter(Vec2::splat(size), Sense::drag());
     if response.dragged() {
         let delta = response.drag_delta();

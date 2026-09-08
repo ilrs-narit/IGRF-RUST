@@ -185,6 +185,7 @@ enum AppTab {
     #[default]
     Control,
     Model,
+    Settings,
 }
 
 impl AppTab {
@@ -192,6 +193,7 @@ impl AppTab {
         match self {
             Self::Control => "IGRF Control",
             Self::Model => "IGRF Model",
+            Self::Settings => "Settings",
         }
     }
 }
@@ -2175,7 +2177,7 @@ impl IgrfApp {
     fn show_tab_strip(&mut self, ui: &mut egui::Ui) {
         ui.add_space(4.0);
         ui.horizontal(|ui| {
-            for tab in [AppTab::Control, AppTab::Model] {
+            for tab in [AppTab::Control, AppTab::Model, AppTab::Settings] {
                 let selected = self.active_tab == tab;
                 let button =
                     egui::Button::new(egui::RichText::new(tab.label()).strong().size(15.0))
@@ -2186,7 +2188,7 @@ impl IgrfApp {
                 }
             }
         });
-        ui.add_space(4.0);
+        ui.add_space(2.0);
         ui.separator();
     }
 
@@ -3260,16 +3262,22 @@ impl IgrfApp {
         let mut pause = false;
         ui.group(|ui| {
             ui.set_min_width(ui.available_width().max(0.0));
+            ui.spacing_mut().item_spacing.y = 2.0;
+            ui.spacing_mut().interact_size.y = 16.0;
+            ui.spacing_mut().button_padding = egui::vec2(4.0, 1.0);
+            for font in ui.style_mut().text_styles.values_mut() {
+                font.size *= 0.8;
+            }
             let running = self.pid_running[axis];
             ui.horizontal(|ui| {
                 status_pill(ui, &format!("Axis {label}"), LinkState::from_open(running));
-                if ui.button(if running { "Pause" } else { "Start" }).clicked() {
+                if ui.small_button(if running { "Pause" } else { "Start" }).clicked() {
                     self.pid_running[axis] = !running;
                     if !self.pid_running[axis] {
                         pause = true;
                     }
                 }
-                if ui.button("Reset").clicked() {
+                if ui.small_button("Reset").clicked() {
                     self.reset_axis(axis);
                 }
             });
@@ -3281,40 +3289,41 @@ impl IgrfApp {
                 self.processed.error_per_z,
             ][axis];
 
-            ui.add_space(2.0);
-            ui.label(
-                egui::RichText::new(format!("{:+.3}", self.filtered[axis]))
-                    .monospace()
-                    .size(26.0)
-                    .strong(),
-            );
-            ui.label(egui::RichText::new("filtered nT").small().weak());
-            ui.label(format!("set {:+.3}", self.pid_settings[axis].setpoint));
-            if self.pid_settings[axis].setpoint == 0.0 {
-                // A percentage against a zero setpoint is undefined, and
-                // `calculate_percent` reports 0.0 there - which would paint a
-                // fully saturated axis green. Show the raw error only.
-                ui.label(format!("err {error:+.3}"));
-            } else {
-                ui.colored_label(
-                    error_color(error_percent),
-                    format!("err {error:+.3} ({error_percent:.2}%)"),
-                );
-            }
-            ui.horizontal(|ui| {
+            ui.columns(2, |cols| {
+                let ui = &mut cols[0];
                 ui.label(
-                    egui::RichText::new(format!("raw {:+.3}", self.raw[axis]))
-                        .small()
-                        .weak(),
+                    egui::RichText::new(format!("{:+.3}", self.filtered[axis]))
+                        .monospace()
+                        .size(14.0)
+                        .strong(),
                 );
-                ui.label(
-                    egui::RichText::new(format!("cal {:+.3}", self.calibrated[axis]))
-                        .small()
-                        .weak(),
-                );
+                ui.label(egui::RichText::new("filtered nT").small().weak());
+
+                let ui = &mut cols[1];
+                ui.label(format!("set {:+.3}", self.pid_settings[axis].setpoint));
+                if self.pid_settings[axis].setpoint == 0.0 {
+                    ui.label(format!("err {error:+.3}"));
+                } else {
+                    ui.colored_label(
+                        error_color(error_percent),
+                        format!("err {error:+.3} ({error_percent:.2}%)"),
+                    );
+                }
+                ui.horizontal(|ui| {
+                    ui.label(
+                        egui::RichText::new(format!("raw {:+.3}", self.raw[axis]))
+                            .small()
+                            .weak(),
+                    );
+                    ui.label(
+                        egui::RichText::new(format!("cal {:+.3}", self.calibrated[axis]))
+                            .small()
+                            .weak(),
+                    );
+                });
             });
 
-            ui.add_space(4.0);
+            ui.add_space(2.0);
             let fraction = output_fraction(
                 self.outputs[axis],
                 self.pid_settings[axis].min_output,
@@ -3336,74 +3345,69 @@ impl IgrfApp {
             ui.add(bar);
 
             ui.separator();
-            egui::Grid::new(format!("pid-grid-{axis}"))
-                .num_columns(2)
-                .striped(true)
-                .show(ui, |ui| {
-                    for (name, value) in [
-                        ("Kp", &mut self.pid_settings[axis].kp),
-                        ("Ki", &mut self.pid_settings[axis].ki),
-                        ("Kd", &mut self.pid_settings[axis].kd),
-                    ] {
-                        ui.label(name);
-                        ui.add(egui::DragValue::new(value).speed(0.1));
+            let ceiling = FIRMWARE_MAX_OUTPUT[axis];
+            ui.columns(2, |cols| {
+                egui::Grid::new(format!("pid-grid-{axis}"))
+                    .num_columns(2)
+                    .striped(true)
+                    .show(&mut cols[0], |ui| {
+                        for (name, value) in [
+                            ("Kp", &mut self.pid_settings[axis].kp),
+                            ("Ki", &mut self.pid_settings[axis].ki),
+                            ("Kd", &mut self.pid_settings[axis].kd),
+                        ] {
+                            ui.label(name);
+                            ui.add(egui::DragValue::new(value).speed(0.1));
+                            ui.end_row();
+                        }
+                        ui.label("Min out");
+                        ui.add(
+                            egui::DragValue::new(&mut self.pid_settings[axis].min_output)
+                                .speed(1.0)
+                                .range(-ceiling..=0.0),
+                        );
                         ui.end_row();
-                    }
-                    // Bounded by what the firmware acts on rather than by
-                    // taste: past its ceiling the raw value goes into a 16-bit
-                    // CCR and truncates, so a bigger number is a smaller field.
-                    let ceiling = FIRMWARE_MAX_OUTPUT[axis];
-                    ui.label("Min out");
-                    ui.add(
-                        egui::DragValue::new(&mut self.pid_settings[axis].min_output)
-                            .speed(1.0)
-                            .range(-ceiling..=0.0),
-                    );
-                    ui.end_row();
-                    ui.label("Max out");
-                    ui.add(
-                        egui::DragValue::new(&mut self.pid_settings[axis].max_output)
-                            .speed(1.0)
-                            .range(0.0..=ceiling),
-                    );
-                    ui.end_row();
-                    ui.label(
-                        egui::RichText::new(format!("firmware ceiling {ceiling:.0}"))
-                            .small()
-                            .weak(),
-                    );
-                    ui.end_row();
-                    // The live setpoint is owned by the ramp, so editing it
-                    // here commands a new target rather than writing the value
-                    // the PID reads this tick - otherwise the next tick would
-                    // overwrite whatever was typed.
-                    ui.label("Setpoint nT");
-                    let mut commanded = target[axis];
-                    if ui
-                        .add(egui::DragValue::new(&mut commanded).speed(1.0))
-                        .changed()
-                    {
-                        let mut field = target;
-                        field[axis] = commanded;
-                        command = Some(field);
-                    }
-                    ui.end_row();
-                });
-            ui.label(egui::RichText::new("Kalman filter").small().weak());
-            egui::Grid::new(format!("filter-grid-{axis}"))
-                .num_columns(2)
-                .striped(true)
-                .show(ui, |ui| {
-                    for (name, value, speed) in [
-                        ("Q process", &mut self.filter_settings[axis].q, 0.05),
-                        ("R measure", &mut self.filter_settings[axis].r, 1.0),
-                        ("Spike nT", &mut self.filter_settings[axis].spike_nt, 50.0),
-                    ] {
-                        ui.label(name);
-                        ui.add(egui::DragValue::new(value).speed(speed).range(1e-6..=1e9));
+                        ui.label("Max out");
+                        ui.add(
+                            egui::DragValue::new(&mut self.pid_settings[axis].max_output)
+                                .speed(1.0)
+                                .range(0.0..=ceiling),
+                        );
                         ui.end_row();
-                    }
-                });
+                        ui.label(
+                            egui::RichText::new(format!("firmware ceiling {ceiling:.0}"))
+                                .small()
+                                .weak(),
+                        );
+                        ui.end_row();
+                    });
+
+                egui::Grid::new(format!("filter-grid-{axis}"))
+                    .num_columns(2)
+                    .striped(true)
+                    .show(&mut cols[1], |ui| {
+                        ui.label("Setpoint nT");
+                        let mut commanded = target[axis];
+                        if ui
+                            .add(egui::DragValue::new(&mut commanded).speed(1.0))
+                            .changed()
+                        {
+                            let mut field = target;
+                            field[axis] = commanded;
+                            command = Some(field);
+                        }
+                        ui.end_row();
+                        for (name, value, speed) in [
+                            ("Q process", &mut self.filter_settings[axis].q, 0.05),
+                            ("R measure", &mut self.filter_settings[axis].r, 1.0),
+                            ("Spike nT", &mut self.filter_settings[axis].spike_nt, 50.0),
+                        ] {
+                            ui.label(name);
+                            ui.add(egui::DragValue::new(value).speed(speed).range(1e-6..=1e9));
+                            ui.end_row();
+                        }
+                    });
+            });
         });
         if pause {
             // Pausing one axis stops that axis' PID, but the controller holds
@@ -3418,23 +3422,48 @@ impl IgrfApp {
             self.command_setpoint(field);
         }
     }
-
-    fn show_axis_row(&mut self, ui: &mut egui::Ui) {
+    
+    fn show_control_columns(&mut self, ui: &mut egui::Ui) {
         if fits_columns(ui, 3) {
             ui.columns(3, |columns| {
-                for (axis, column) in columns.iter_mut().enumerate() {
-                    self.axis_column(column, axis);
+                self.show_magson_strip(&mut columns[0]);
+                columns[0].separator();
+                for axis in 0..3 {
+                    self.axis_column(&mut columns[0], axis);
+                    columns[0].add_space(4.0);
                 }
+
+                self.show_plots_header(&mut columns[1]);
+                columns[1].add_space(4.0);
+                for axis in 0..3 {
+                    self.axis_sensor_plot(&mut columns[1], axis);
+                }
+
+                self.show_cage(&mut columns[2]);
+                self.magnitude_plot(&mut columns[2]);
+                self.magson_plot(&mut columns[2]);
             });
         } else {
+            self.show_magson_strip(ui);
+            ui.separator();
             for axis in 0..3 {
                 self.axis_column(ui, axis);
             }
+            ui.separator();
+            self.show_plots_header(ui);
+            ui.add_space(4.0);
+            for axis in 0..3 {
+                self.axis_sensor_plot(ui, axis);
+            }
+            ui.separator();
+            self.show_cage(ui);
+            self.magnitude_plot(ui);
+            self.magson_plot(ui);
         }
     }
 
     fn show_magson_strip(&self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
             ui.label(egui::RichText::new("Magson").strong());
             ui.separator();
             for (label, value) in [
@@ -3466,7 +3495,7 @@ impl IgrfApp {
             .show(ui, |ui| cage::show(ui, &mut self.cage, drive));
     }
 
-    fn show_plots(&mut self, ui: &mut egui::Ui) {
+    fn show_plots_header(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
             ui.label(egui::RichText::new("Live plots (last 500 points)").strong());
             ui.checkbox(&mut self.follow_plots, "Follow live");
@@ -3480,92 +3509,62 @@ impl IgrfApp {
                 .weak(),
             );
         });
-        let follow = self.follow_plots;
-        let axis_plot = |ui: &mut egui::Ui, axis: usize| {
-            show_plot(
-                ui,
-                &format!("sensor-plot-{axis}"),
-                &format!("{} nT: setpoint vs measured", AXES[axis]),
-                &[
-                    (
-                        "Setpoint",
-                        &self.history.sensor_setpoint[axis],
-                        Color32::LIGHT_RED,
-                    ),
-                    (
-                        "Measured",
-                        &self.history.sensor_measured[axis],
-                        Color32::LIGHT_BLUE,
-                    ),
-                ],
-                follow,
-            );
-        };
-        if fits_columns(ui, 3) {
-            ui.columns(3, |columns| {
-                for (axis, column) in columns.iter_mut().enumerate() {
-                    axis_plot(column, axis);
-                }
-            });
-        } else {
-            for axis in 0..3 {
-                axis_plot(ui, axis);
-            }
-        }
+    }
+    fn axis_sensor_plot(&self, ui: &mut egui::Ui, axis: usize) {
+        show_plot(
+            ui,
+            &format!("sensor-plot-{axis}"),
+            &format!("{} nT: setpoint vs measured", AXES[axis]),
+            &[
+                (
+                    "Setpoint",
+                    &self.history.sensor_setpoint[axis],
+                    Color32::LIGHT_RED,
+                ),
+                (
+                    "Measured",
+                    &self.history.sensor_measured[axis],
+                    Color32::LIGHT_BLUE,
+                ),
+            ],
+            self.follow_plots,
+        );
     }
 
-    /// Cage on the left, the two whole-system plots stacked on the right, so the
-    /// square 3D view does not leave half a row empty.
-    fn show_cage_row(&mut self, ui: &mut egui::Ui) {
-        if fits_columns(ui, 2) {
-            ui.columns(2, |columns| {
-                self.show_cage(&mut columns[0]);
-                self.show_summary_plots(&mut columns[1]);
-            });
-        } else {
-            self.show_cage(ui);
-            self.show_summary_plots(ui);
-        }
+    fn magnitude_plot(&self, ui: &mut egui::Ui) {
+        show_plot(
+            ui,
+            "sensor-magnitude-plot",
+            "|B| nT: setpoint vs measured",
+            &[
+                (
+                    "Setpoint",
+                    &self.history.sensor_magnitude_setpoint,
+                    Color32::LIGHT_RED,
+                ),
+                (
+                    "Measured",
+                    &self.history.sensor_magnitude_measured,
+                    Color32::LIGHT_BLUE,
+                ),
+            ],
+            self.follow_plots,
+        );
     }
 
-    fn show_summary_plots(&self, ui: &mut egui::Ui) {
-        let follow = self.follow_plots;
-        let magnitude_plot = |ui: &mut egui::Ui| {
-            show_plot(
-                ui,
-                "sensor-magnitude-plot",
-                "|B| nT: setpoint vs measured",
-                &[
-                    (
-                        "Setpoint",
-                        &self.history.sensor_magnitude_setpoint,
-                        Color32::LIGHT_RED,
-                    ),
-                    (
-                        "Measured",
-                        &self.history.sensor_magnitude_measured,
-                        Color32::LIGHT_BLUE,
-                    ),
-                ],
-                follow,
-            );
-        };
-        let magson_plot = |ui: &mut egui::Ui| {
-            show_plot(
-                ui,
-                "magson-plot",
-                "Magson X/Y/Z/total (nT)",
-                &[
-                    ("X", &self.history.magson[0], Color32::LIGHT_RED),
-                    ("Y", &self.history.magson[1], Color32::LIGHT_GREEN),
-                    ("Z", &self.history.magson[2], Color32::LIGHT_BLUE),
-                    ("Total", &self.history.magson[3], Color32::YELLOW),
-                ],
-                follow,
-            );
-        };
-        magnitude_plot(ui);
-        magson_plot(ui);
+    fn magson_plot(&self, ui: &mut egui::Ui) {
+        show_plot(
+            ui,
+            "magson-plot",
+            "Magson X/Y/Z/total (nT)",
+            &[
+                ("X", &self.history.magson[0], Color32::LIGHT_RED),
+                ("Y", &self.history.magson[1], Color32::LIGHT_GREEN),
+                ("Z", &self.history.magson[2], Color32::LIGHT_BLUE),
+                ("Total", &self.history.magson[3], Color32::YELLOW),
+            ],
+            self.follow_plots,
+        );
     }
 }
 
@@ -3611,40 +3610,37 @@ impl eframe::App for IgrfApp {
                     self.show_top_bar(ui);
                     ui.add_space(4.0);
                 });
-                egui::Panel::left("setup")
-                    .resizable(true)
-                    .default_size(300.0)
-                    .size_range(240.0..=460.0)
-                    .show(ui, |ui| {
-                        egui::ScrollArea::vertical().show(ui, |ui| {
-                            egui::CollapsingHeader::new("Connections")
-                                .default_open(true)
-                                .show(ui, |ui| self.show_connection_panel(ui));
-                            egui::CollapsingHeader::new("LAN static IP")
-                                .default_open(false)
-                                .show(ui, |ui| self.show_lan_panel(ui));
-                            egui::CollapsingHeader::new("Setpoint command")
-                                .default_open(true)
-                                .show(ui, |ui| self.show_setpoint_panel(ui));
-                            egui::CollapsingHeader::new("Sensor calibration")
-                                .default_open(false)
-                                .show(ui, |ui| self.show_calibration_panel(ui));
-                            egui::CollapsingHeader::new("Config / logging")
-                                .default_open(true)
-                                .show(ui, |ui| self.show_config_panel(ui));
-                        });
-                    });
                 egui::CentralPanel::default().show(ui, |ui| {
                     egui::ScrollArea::vertical()
                         .auto_shrink([false; 2])
                         .show(ui, |ui| {
-                            self.show_axis_row(ui);
-                            ui.add_space(4.0);
-                            self.show_magson_strip(ui);
-                            ui.separator();
-                            self.show_plots(ui);
-                            ui.separator();
-                            self.show_cage_row(ui);
+                            self.show_control_columns(ui);
+                        });
+                });
+            }
+            AppTab::Settings => {
+                egui::CentralPanel::default().show(ui, |ui| {
+                    egui::ScrollArea::vertical()
+                        .auto_shrink([false; 2])
+                        .show(ui, |ui| {
+                            ui.columns(2, |cols| {
+                                egui::CollapsingHeader::new("Connections")
+                                    .default_open(true)
+                                    .show(&mut cols[0], |ui| self.show_connection_panel(ui));
+                                egui::CollapsingHeader::new("LAN static IP")
+                                    .default_open(false)
+                                    .show(&mut cols[0], |ui| self.show_lan_panel(ui));
+
+                                egui::CollapsingHeader::new("Setpoint command")
+                                    .default_open(true)
+                                    .show(&mut cols[1], |ui| self.show_setpoint_panel(ui));
+                                egui::CollapsingHeader::new("Sensor calibration")
+                                    .default_open(false)
+                                    .show(&mut cols[1], |ui| self.show_calibration_panel(ui));
+                                egui::CollapsingHeader::new("Config / logging")
+                                    .default_open(true)
+                                    .show(&mut cols[1], |ui| self.show_config_panel(ui));
+                            });
                         });
                 });
             }
