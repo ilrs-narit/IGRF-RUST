@@ -3865,13 +3865,20 @@ fn validate_pid_settings(settings: &PidSettings) -> Result<(), &'static str> {
 /// re-enumerates USB, and `ttyUSB0` can come back as `ttyUSB1`; the by-id path
 /// carries the adapter's serial number, so a saved config still points at the
 /// same physical device.
+///
+/// A hub that drops or re-enumerates its device can leave the by-id symlink
+/// behind after the tty it points at is gone. Dangling entries are skipped so
+/// selecting one cannot fail on a dead path - the device, if it came back,
+/// reappears under its kernel name or a fresh by-id link.
 fn stable_first(ports: Vec<serialport::SerialPortInfo>) -> Vec<String> {
     let mut names: Vec<String> = Vec::new();
     if let Ok(entries) = std::fs::read_dir("/dev/serial/by-id") {
         names.extend(
             entries
                 .flatten()
-                .map(|entry| entry.path().to_string_lossy().into_owned()),
+                .map(|entry| entry.path())
+                .filter(|path| std::fs::canonicalize(path).is_ok())
+                .map(|path| path.to_string_lossy().into_owned()),
         );
         names.sort();
     }
