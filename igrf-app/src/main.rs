@@ -99,8 +99,8 @@ fn main() -> eframe::Result {
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([1600.0, 1000.0])
-            .with_min_inner_size([1100.0, 700.0]),
+            .with_inner_size([1024.0, 600.0])
+            .with_min_inner_size([1024.0, 600.0]),
         ..Default::default()
     };
     eframe::run_native(
@@ -3261,7 +3261,7 @@ impl IgrfApp {
         let mut pause = false;
         ui.group(|ui| {
             ui.set_min_width(ui.available_width().max(0.0));
-            ui.spacing_mut().item_spacing.y = 2.0;
+            ui.spacing_mut().item_spacing.y = 1.0;
             ui.spacing_mut().interact_size.y = 16.0;
             ui.spacing_mut().button_padding = egui::vec2(4.0, 1.0);
             for font in ui.style_mut().text_styles.values_mut() {
@@ -3288,17 +3288,15 @@ impl IgrfApp {
                 self.processed.error_per_z,
             ][axis];
 
-            ui.columns(2, |cols| {
-                let ui = &mut cols[0];
+            ui.horizontal(|ui| {
                 ui.label(
                     egui::RichText::new(format!("{:+.3}", self.filtered[axis]))
                         .monospace()
-                        .size(14.0)
+                        .size(16.0)
                         .strong(),
                 );
-                ui.label(egui::RichText::new("filtered nT").small().weak());
-
-                let ui = &mut cols[1];
+                ui.label(egui::RichText::new("nT").small());
+                ui.separator();
                 ui.label(format!("set {:+.3}", self.pid_settings[axis].setpoint));
                 if self.pid_settings[axis].setpoint == 0.0 {
                     ui.label(format!("err {error:+.3}"));
@@ -3308,21 +3306,15 @@ impl IgrfApp {
                         format!("err {error:+.3} ({error_percent:.2}%)"),
                     );
                 }
-                ui.horizontal(|ui| {
-                    ui.label(
-                        egui::RichText::new(format!("raw {:+.3}", self.raw[axis]))
-                            .small()
-                            .weak(),
-                    );
-                    ui.label(
-                        egui::RichText::new(format!("cal {:+.3}", self.calibrated[axis]))
-                            .small()
-                            .weak(),
-                    );
-                });
             });
+            ui.label(
+                egui::RichText::new(format!(
+                    "raw {:+.3}   cal {:+.3}",
+                    self.raw[axis], self.calibrated[axis]
+                ))
+                .weak(),
+            );
 
-            ui.add_space(2.0);
             let fraction = output_fraction(
                 self.outputs[axis],
                 self.pid_settings[axis].min_output,
@@ -3343,9 +3335,11 @@ impl IgrfApp {
             }
             ui.add(bar);
 
+            // Tuning laid out in three columns so all three axis cards still
+            // fit a 1024x600 screen without a dropdown.
             ui.separator();
             let ceiling = FIRMWARE_MAX_OUTPUT[axis];
-            ui.columns(2, |cols| {
+            ui.columns(3, |cols| {
                 egui::Grid::new(format!("pid-grid-{axis}"))
                     .num_columns(2)
                     .striped(true)
@@ -3359,33 +3353,13 @@ impl IgrfApp {
                             ui.add(egui::DragValue::new(value).speed(0.1));
                             ui.end_row();
                         }
-                        ui.label("Min out");
-                        ui.add(
-                            egui::DragValue::new(&mut self.pid_settings[axis].min_output)
-                                .speed(1.0)
-                                .range(-ceiling..=0.0),
-                        );
-                        ui.end_row();
-                        ui.label("Max out");
-                        ui.add(
-                            egui::DragValue::new(&mut self.pid_settings[axis].max_output)
-                                .speed(1.0)
-                                .range(0.0..=ceiling),
-                        );
-                        ui.end_row();
-                        ui.label(
-                            egui::RichText::new(format!("firmware ceiling {ceiling:.0}"))
-                                .small()
-                                .weak(),
-                        );
-                        ui.end_row();
                     });
 
-                egui::Grid::new(format!("filter-grid-{axis}"))
+                egui::Grid::new(format!("out-grid-{axis}"))
                     .num_columns(2)
                     .striped(true)
                     .show(&mut cols[1], |ui| {
-                        ui.label("Setpoint nT");
+                        ui.label("Setpoint");
                         let mut commanded = target[axis];
                         if ui
                             .add(egui::DragValue::new(&mut commanded).speed(1.0))
@@ -3396,10 +3370,31 @@ impl IgrfApp {
                             command = Some(field);
                         }
                         ui.end_row();
+                        ui.label("Min out");
+                        ui.add(
+                            egui::DragValue::new(&mut self.pid_settings[axis].min_output)
+                                .speed(1.0)
+                                .range(-ceiling..=0.0),
+                        );
+                        ui.end_row();
+                        ui.label("Max out")
+                            .on_hover_text(format!("firmware ceiling {ceiling:.0}"));
+                        ui.add(
+                            egui::DragValue::new(&mut self.pid_settings[axis].max_output)
+                                .speed(1.0)
+                                .range(0.0..=ceiling),
+                        );
+                        ui.end_row();
+                    });
+
+                egui::Grid::new(format!("filter-grid-{axis}"))
+                    .num_columns(2)
+                    .striped(true)
+                    .show(&mut cols[2], |ui| {
                         for (name, value, speed) in [
-                            ("Q process", &mut self.filter_settings[axis].q, 0.05),
-                            ("R measure", &mut self.filter_settings[axis].r, 1.0),
-                            ("Spike nT", &mut self.filter_settings[axis].spike_nt, 50.0),
+                            ("Q proc", &mut self.filter_settings[axis].q, 0.05),
+                            ("R meas", &mut self.filter_settings[axis].r, 1.0),
+                            ("Spike", &mut self.filter_settings[axis].spike_nt, 50.0),
                         ] {
                             ui.label(name);
                             ui.add(egui::DragValue::new(value).speed(speed).range(1e-6..=1e9));
@@ -3423,61 +3418,70 @@ impl IgrfApp {
     }
     
     fn show_control_columns(&mut self, ui: &mut egui::Ui) {
-        if fits_columns(ui, 3) {
-            ui.columns(3, |columns| {
-                self.show_magson_strip(&mut columns[0]);
-                columns[0].separator();
-                for axis in 0..3 {
-                    self.axis_column(&mut columns[0], axis);
-                    columns[0].add_space(4.0);
-                }
-
-                self.show_plots_header(&mut columns[1]);
-                columns[1].add_space(4.0);
-                for axis in 0..3 {
-                    self.axis_sensor_plot(&mut columns[1], axis);
-                }
-
-                self.show_cage(&mut columns[2]);
-                self.magnitude_plot(&mut columns[2]);
-                self.magson_plot(&mut columns[2]);
-            });
-        } else {
-            self.show_magson_strip(ui);
-            ui.separator();
-            for axis in 0..3 {
-                self.axis_column(ui, axis);
-            }
-            ui.separator();
-            self.show_plots_header(ui);
-            ui.add_space(4.0);
-            for axis in 0..3 {
-                self.axis_sensor_plot(ui, axis);
-            }
-            ui.separator();
-            self.show_cage(ui);
-            self.magnitude_plot(ui);
-            self.magson_plot(ui);
+        if !fits_columns(ui, 3) {
+            egui::ScrollArea::vertical()
+                .auto_shrink([false; 2])
+                .show(ui, |ui| {
+                    self.show_magson_strip(ui);
+                    ui.separator();
+                    for axis in 0..3 {
+                        self.axis_column(ui, axis);
+                    }
+                    ui.separator();
+                    self.show_plots_header(ui);
+                    for axis in 0..3 {
+                        self.axis_sensor_plot(ui, axis, 160.0);
+                    }
+                    ui.separator();
+                    self.show_cage(ui, 240.0);
+                    self.magnitude_plot(ui, 160.0);
+                    self.magson_plot(ui, 160.0);
+                });
+            return;
         }
+
+        let budget = ui.available_height().clamp(320.0, 900.0);
+        let plot_h = ((budget - 22.0 - 3.0 * 16.0) / 3.0).clamp(70.0, 190.0);
+        let cage_h = (budget - 20.0 - 2.0 * (plot_h + 16.0)).clamp(110.0, 240.0);
+
+        ui.columns(3, |columns| {
+            self.show_magson_strip(&mut columns[0]);
+            columns[0].separator();
+            for axis in 0..3 {
+                self.axis_column(&mut columns[0], axis);
+                columns[0].add_space(2.0);
+            }
+
+            self.show_plots_header(&mut columns[1]);
+            for axis in 0..3 {
+                self.axis_sensor_plot(&mut columns[1], axis, plot_h);
+            }
+
+            self.show_cage(&mut columns[2], cage_h);
+            self.magnitude_plot(&mut columns[2], plot_h);
+            self.magson_plot(&mut columns[2], plot_h);
+        });
     }
 
     fn show_magson_strip(&self, ui: &mut egui::Ui) {
         ui.horizontal_wrapped(|ui| {
-            ui.label(egui::RichText::new("Magson").strong());
-            ui.separator();
+            ui.label(egui::RichText::new("Magson").strong().small());
             for (label, value) in [
                 ("X", self.magson[0]),
                 ("Y", self.magson[1]),
                 ("Z", self.magson[2]),
                 ("|B|", self.magson_total),
             ] {
-                ui.label(egui::RichText::new(format!("{label} {value:+.3}")).monospace());
-                ui.add_space(6.0);
+                ui.label(
+                    egui::RichText::new(format!("{label} {value:+.3}"))
+                        .monospace()
+                        .small(),
+                );
             }
         });
     }
 
-    fn show_cage(&mut self, ui: &mut egui::Ui) {
+    fn show_cage(&mut self, ui: &mut egui::Ui, max_size: f32) {
         // The view wants signed drive normalised against each axis' own limit,
         // not raw controller units.
         let drive = std::array::from_fn(|axis| {
@@ -3491,25 +3495,17 @@ impl IgrfApp {
         });
         egui::CollapsingHeader::new("Coil cage")
             .default_open(true)
-            .show(ui, |ui| cage::show(ui, &mut self.cage, drive));
+            .show(ui, |ui| cage::show(ui, &mut self.cage, drive, max_size));
     }
 
     fn show_plots_header(&mut self, ui: &mut egui::Ui) {
         ui.horizontal(|ui| {
-            ui.label(egui::RichText::new("Live plots (last 500 points)").strong());
+            ui.label(egui::RichText::new("Live plots").strong().small());
             ui.checkbox(&mut self.follow_plots, "Follow live");
-            ui.label(
-                egui::RichText::new(if self.follow_plots {
-                    "auto-scaling \u{2022} uncheck to pan/zoom"
-                } else {
-                    "drag = pan \u{2022} ctrl+scroll = zoom \u{2022} right-drag = box \u{2022} double-click = reset"
-                })
-                .small()
-                .weak(),
-            );
         });
     }
-    fn axis_sensor_plot(&self, ui: &mut egui::Ui, axis: usize) {
+
+    fn axis_sensor_plot(&self, ui: &mut egui::Ui, axis: usize, height: f32) {
         show_plot(
             ui,
             &format!("sensor-plot-{axis}"),
@@ -3527,10 +3523,11 @@ impl IgrfApp {
                 ),
             ],
             self.follow_plots,
+            height,
         );
     }
 
-    fn magnitude_plot(&self, ui: &mut egui::Ui) {
+    fn magnitude_plot(&self, ui: &mut egui::Ui, height: f32) {
         show_plot(
             ui,
             "sensor-magnitude-plot",
@@ -3548,10 +3545,11 @@ impl IgrfApp {
                 ),
             ],
             self.follow_plots,
+            height,
         );
     }
 
-    fn magson_plot(&self, ui: &mut egui::Ui) {
+    fn magson_plot(&self, ui: &mut egui::Ui, height: f32) {
         show_plot(
             ui,
             "magson-plot",
@@ -3563,6 +3561,7 @@ impl IgrfApp {
                 ("Total", &self.history.magson[3], Color32::YELLOW),
             ],
             self.follow_plots,
+            height,
         );
     }
 }
@@ -3605,16 +3604,15 @@ impl eframe::App for IgrfApp {
         match self.active_tab {
             AppTab::Control => {
                 egui::Panel::top("top-bar").show(ui, |ui| {
-                    ui.add_space(4.0);
+                    ui.add_space(2.0);
                     self.show_top_bar(ui);
-                    ui.add_space(4.0);
+                    ui.add_space(2.0);
                 });
+                // No ScrollArea here: the Control tab sizes its plots and cage
+                // to whatever height is left, so it always fits on one screen
+                // (down to 1024x600). The narrow fallback keeps its own scroll.
                 egui::CentralPanel::default().show(ui, |ui| {
-                    egui::ScrollArea::vertical()
-                        .auto_shrink([false; 2])
-                        .show(ui, |ui| {
-                            self.show_control_columns(ui);
-                        });
+                    self.show_control_columns(ui);
                 });
             }
             AppTab::Settings => {
@@ -3900,11 +3898,12 @@ fn show_plot(
     title: &str,
     series: &[(&str, &History, Color32)],
     follow: bool,
+    height: f32,
 ) {
-    ui.label(title);
+    ui.label(egui::RichText::new(title).small());
     Plot::new(id)
         .legend(Legend::default())
-        .height(200.0)
+        .height(height)
         .show(ui, |plot_ui| {
             if follow {
                 plot_ui.set_auto_bounds(true);
