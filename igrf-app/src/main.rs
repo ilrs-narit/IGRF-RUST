@@ -409,6 +409,7 @@ struct IgrfApp {
     outputs: [f64; 3],
     history: PlotHistory,
     follow_plots: bool,
+    fullscreen: bool,
     cage: cage::CageView,
     started_at: Instant,
     last_pid_tick: Instant,
@@ -552,6 +553,7 @@ impl IgrfApp {
             outputs: [0.0; 3],
             history: PlotHistory::default(),
             follow_plots: true,
+            fullscreen: true,
             cage: cage::CageView::default(),
             started_at: Instant::now(),
             last_pid_tick: Instant::now(),
@@ -3583,6 +3585,10 @@ impl eframe::App for IgrfApp {
         self.poll_io();
         self.run_pid();
         self.tick_satellite_tracking();
+        if ctx.input(|input| input.key_pressed(egui::Key::F11)) {
+            self.fullscreen = !self.fullscreen;
+            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(self.fullscreen));
+        }
         ctx.request_repaint_after(UI_INTERVAL);
     }
 
