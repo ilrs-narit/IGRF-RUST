@@ -290,11 +290,10 @@ impl TleSet {
     /// `25544` in `1 25544U 98067A ...`). The trailing classification letter is
     /// stripped before parsing.
     pub fn catalog_number(&self) -> Result<u64, SatelliteError> {
-        let token = self
-            .line1
-            .split_whitespace()
-            .nth(1)
-            .ok_or_else(|| SatelliteError::Tle("line 1 has no catalog-number field".to_owned()))?;
+        let token =
+            self.line1.split_whitespace().nth(1).ok_or_else(|| {
+                SatelliteError::Tle("line 1 has no catalog-number field".to_owned())
+            })?;
         token
             .trim_end_matches(|character: char| !character.is_ascii_digit())
             .parse()
@@ -389,7 +388,10 @@ mod tests {
     #[test]
     fn iss_orbital_period_is_about_93_minutes() {
         let period = iss_tracker().orbital_period_minutes();
-        assert!((period - 93.0).abs() < 1.0, "expected ~93 min, got {period}");
+        assert!(
+            (period - 93.0).abs() < 1.0,
+            "expected ~93 min, got {period}"
+        );
     }
 
     #[test]

@@ -44,7 +44,9 @@ impl fmt::Display for SpaceTrackError {
             Self::Http(message) => write!(f, "Space-Track transport error: {message}"),
             Self::Auth(message) => write!(f, "Space-Track authentication failed: {message}"),
             Self::Api(message) => write!(f, "Space-Track query error: {message}"),
-            Self::Decode(message) => write!(f, "Space-Track response was not understood: {message}"),
+            Self::Decode(message) => {
+                write!(f, "Space-Track response was not understood: {message}")
+            }
         }
     }
 }
@@ -106,7 +108,11 @@ pub struct SpaceTrackTle {
     // --- Identity and the raw TLE ---
     #[serde(rename = "NORAD_CAT_ID", deserialize_with = "de_flexible_u64")]
     pub norad_cat_id: u64,
-    #[serde(rename = "OBJECT_NAME", default, deserialize_with = "de_string_or_null")]
+    #[serde(
+        rename = "OBJECT_NAME",
+        default,
+        deserialize_with = "de_string_or_null"
+    )]
     pub object_name: String,
     /// International designator, e.g. `1998-067A`.
     #[serde(rename = "OBJECT_ID", default, deserialize_with = "de_string_or_null")]
@@ -122,22 +128,42 @@ pub struct SpaceTrackTle {
     pub line2: String,
 
     // --- OMM header ---
-    #[serde(rename = "CCSDS_OMM_VERS", default, deserialize_with = "de_string_or_null")]
+    #[serde(
+        rename = "CCSDS_OMM_VERS",
+        default,
+        deserialize_with = "de_string_or_null"
+    )]
     pub ccsds_omm_vers: String,
     #[serde(rename = "COMMENT", default, deserialize_with = "de_string_or_null")]
     pub comment: String,
     /// When Space-Track generated this element set.
-    #[serde(rename = "CREATION_DATE", default, deserialize_with = "de_string_or_null")]
+    #[serde(
+        rename = "CREATION_DATE",
+        default,
+        deserialize_with = "de_string_or_null"
+    )]
     pub creation_date: String,
     #[serde(rename = "ORIGINATOR", default, deserialize_with = "de_string_or_null")]
     pub originator: String,
-    #[serde(rename = "CENTER_NAME", default, deserialize_with = "de_string_or_null")]
+    #[serde(
+        rename = "CENTER_NAME",
+        default,
+        deserialize_with = "de_string_or_null"
+    )]
     pub center_name: String,
     #[serde(rename = "REF_FRAME", default, deserialize_with = "de_string_or_null")]
     pub ref_frame: String,
-    #[serde(rename = "TIME_SYSTEM", default, deserialize_with = "de_string_or_null")]
+    #[serde(
+        rename = "TIME_SYSTEM",
+        default,
+        deserialize_with = "de_string_or_null"
+    )]
     pub time_system: String,
-    #[serde(rename = "MEAN_ELEMENT_THEORY", default, deserialize_with = "de_string_or_null")]
+    #[serde(
+        rename = "MEAN_ELEMENT_THEORY",
+        default,
+        deserialize_with = "de_string_or_null"
+    )]
     pub mean_element_theory: String,
 
     // --- Epoch and mean Keplerian elements ---
@@ -156,7 +182,11 @@ pub struct SpaceTrackTle {
     #[serde(rename = "RA_OF_ASC_NODE", default, deserialize_with = "de_f64_flex")]
     pub ra_of_asc_node: f64,
     /// Argument of pericenter, degrees.
-    #[serde(rename = "ARG_OF_PERICENTER", default, deserialize_with = "de_f64_flex")]
+    #[serde(
+        rename = "ARG_OF_PERICENTER",
+        default,
+        deserialize_with = "de_f64_flex"
+    )]
     pub arg_of_pericenter: f64,
     /// Degrees.
     #[serde(rename = "MEAN_ANOMALY", default, deserialize_with = "de_f64_flex")]
@@ -164,7 +194,11 @@ pub struct SpaceTrackTle {
     #[serde(rename = "EPHEMERIS_TYPE", default, deserialize_with = "de_i64_flex")]
     pub ephemeris_type: i64,
     /// `U` unclassified / `C` classified / `S` secret.
-    #[serde(rename = "CLASSIFICATION_TYPE", default, deserialize_with = "de_string_or_null")]
+    #[serde(
+        rename = "CLASSIFICATION_TYPE",
+        default,
+        deserialize_with = "de_string_or_null"
+    )]
     pub classification_type: String,
     #[serde(rename = "ELEMENT_SET_NO", default, deserialize_with = "de_i64_flex")]
     pub element_set_no: i64,
@@ -195,15 +229,27 @@ pub struct SpaceTrackTle {
 
     // --- Catalog metadata (the search UI filters on these) ---
     /// `PAYLOAD` / `ROCKET BODY` / `DEBRIS` / `UNKNOWN` / `TBA`.
-    #[serde(rename = "OBJECT_TYPE", default, deserialize_with = "de_string_or_null")]
+    #[serde(
+        rename = "OBJECT_TYPE",
+        default,
+        deserialize_with = "de_string_or_null"
+    )]
     pub object_type: String,
     /// `SMALL` / `MEDIUM` / `LARGE`, or empty when unknown.
     #[serde(rename = "RCS_SIZE", default, deserialize_with = "de_string_or_null")]
     pub rcs_size: String,
-    #[serde(rename = "COUNTRY_CODE", default, deserialize_with = "de_string_or_null")]
+    #[serde(
+        rename = "COUNTRY_CODE",
+        default,
+        deserialize_with = "de_string_or_null"
+    )]
     pub country_code: String,
     /// `yyyy-mm-dd`.
-    #[serde(rename = "LAUNCH_DATE", default, deserialize_with = "de_string_or_null")]
+    #[serde(
+        rename = "LAUNCH_DATE",
+        default,
+        deserialize_with = "de_string_or_null"
+    )]
     pub launch_date: String,
     /// Launch site code, e.g. `AFETR`, `TYMSC`.
     #[serde(rename = "SITE", default, deserialize_with = "de_string_or_null")]
@@ -211,7 +257,11 @@ pub struct SpaceTrackTle {
     /// `yyyy-mm-dd`, empty while the object is still on orbit.
     #[serde(rename = "DECAY_DATE", default, deserialize_with = "de_string_or_null")]
     pub decay_date: String,
-    #[serde(rename = "DATA_SOURCE", default, deserialize_with = "de_string_or_null")]
+    #[serde(
+        rename = "DATA_SOURCE",
+        default,
+        deserialize_with = "de_string_or_null"
+    )]
     pub data_source: String,
     /// Space-Track's own row id for this element set.
     #[serde(rename = "GP_ID", default, deserialize_with = "de_i64_flex")]
@@ -307,7 +357,9 @@ where
         serde_json::Value::Number(number) => number
             .as_u64()
             .ok_or_else(|| D::Error::custom("not a non-negative integer")),
-        other => Err(D::Error::custom(format!("expected a catalog number, got {other}"))),
+        other => Err(D::Error::custom(format!(
+            "expected a catalog number, got {other}"
+        ))),
     }
 }
 
@@ -357,16 +409,16 @@ impl SpaceTrackClient {
         // A successful login returns an empty body; a rejected one returns 401
         // (or 200 with `{"Login":"Failed"}` on some deployments).
         let body = response.body_mut().read_to_string().unwrap_or_default();
-        if status == 401
-            || status == 403
-            || (body.contains("\"Login\"") && body.contains("Failed"))
+        if status == 401 || status == 403 || (body.contains("\"Login\"") && body.contains("Failed"))
         {
             return Err(SpaceTrackError::Auth(
                 "the login endpoint rejected the credentials".to_owned(),
             ));
         }
         if !(200..300).contains(&status) {
-            return Err(SpaceTrackError::Api(format!("login returned HTTP {status}")));
+            return Err(SpaceTrackError::Api(format!(
+                "login returned HTTP {status}"
+            )));
         }
         self.logged_in = true;
         Ok(())

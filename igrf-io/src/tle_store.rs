@@ -75,21 +75,39 @@ const COLUMNS: &[(&str, &str)] = &[
     ("center_name", "center_name TEXT NOT NULL DEFAULT ''"),
     ("ref_frame", "ref_frame TEXT NOT NULL DEFAULT ''"),
     ("time_system", "time_system TEXT NOT NULL DEFAULT ''"),
-    ("mean_element_theory", "mean_element_theory TEXT NOT NULL DEFAULT ''"),
+    (
+        "mean_element_theory",
+        "mean_element_theory TEXT NOT NULL DEFAULT ''",
+    ),
     ("epoch", "epoch TEXT NOT NULL DEFAULT ''"),
     ("mean_motion", "mean_motion REAL NOT NULL DEFAULT 0"),
     ("eccentricity", "eccentricity REAL NOT NULL DEFAULT 0"),
     ("inclination", "inclination REAL NOT NULL DEFAULT 0"),
     ("ra_of_asc_node", "ra_of_asc_node REAL NOT NULL DEFAULT 0"),
-    ("arg_of_pericenter", "arg_of_pericenter REAL NOT NULL DEFAULT 0"),
+    (
+        "arg_of_pericenter",
+        "arg_of_pericenter REAL NOT NULL DEFAULT 0",
+    ),
     ("mean_anomaly", "mean_anomaly REAL NOT NULL DEFAULT 0"),
-    ("ephemeris_type", "ephemeris_type INTEGER NOT NULL DEFAULT 0"),
-    ("classification_type", "classification_type TEXT NOT NULL DEFAULT ''"),
-    ("element_set_no", "element_set_no INTEGER NOT NULL DEFAULT 0"),
+    (
+        "ephemeris_type",
+        "ephemeris_type INTEGER NOT NULL DEFAULT 0",
+    ),
+    (
+        "classification_type",
+        "classification_type TEXT NOT NULL DEFAULT ''",
+    ),
+    (
+        "element_set_no",
+        "element_set_no INTEGER NOT NULL DEFAULT 0",
+    ),
     ("rev_at_epoch", "rev_at_epoch INTEGER NOT NULL DEFAULT 0"),
     ("bstar", "bstar REAL NOT NULL DEFAULT 0"),
     ("mean_motion_dot", "mean_motion_dot REAL NOT NULL DEFAULT 0"),
-    ("mean_motion_ddot", "mean_motion_ddot REAL NOT NULL DEFAULT 0"),
+    (
+        "mean_motion_ddot",
+        "mean_motion_ddot REAL NOT NULL DEFAULT 0",
+    ),
     ("semimajor_axis", "semimajor_axis REAL NOT NULL DEFAULT 0"),
     ("period", "period REAL NOT NULL DEFAULT 0"),
     ("apoapsis", "apoapsis REAL NOT NULL DEFAULT 0"),
@@ -311,7 +329,8 @@ pub struct StoredTle {
     pub arg_of_pericenter: f64,
     pub mean_anomaly: f64,
     pub ephemeris_type: i64,
-    pub classification_type: String, /// Type: U/C/S
+    pub classification_type: String,
+    /// Type: U/C/S
     pub element_set_no: i64,
     pub rev_at_epoch: i64,
     pub bstar: f64,
@@ -322,8 +341,10 @@ pub struct StoredTle {
     pub apoapsis: f64,
     pub periapsis: f64,
 
-    pub object_type: String,     /// `PAYLOAD` / `ROCKET BODY` / `DEBRIS` / `UNKNOWN` (upper-cased on store).
-    pub rcs_size: String,     /// `SMALL` / `MEDIUM` / `LARGE`, or empty.
+    pub object_type: String,
+    /// `PAYLOAD` / `ROCKET BODY` / `DEBRIS` / `UNKNOWN` (upper-cased on store).
+    pub rcs_size: String,
+    /// `SMALL` / `MEDIUM` / `LARGE`, or empty.
     pub country_code: String,
     pub launch_date: String,
     pub site: String,
@@ -520,9 +541,9 @@ impl TleStore {
     /// stored value.
     pub fn has_object_type(&mut self, object_type: &str) -> Result<bool, TleStoreError> {
         use diesel::dsl::{exists, select};
-        select(exists(
-            tle::table.filter(tle::object_type.eq(object_type.trim().to_uppercase())),
-        ))
+        select(exists(tle::table.filter(
+            tle::object_type.eq(object_type.trim().to_uppercase()),
+        )))
         .get_result(&mut self.connection)
         .map_err(TleStoreError::from)
     }
@@ -543,8 +564,8 @@ impl TleStore {
     /// Drops the stored row for one catalog number. Returns whether a row was
     /// actually removed.
     pub fn remove(&mut self, norad_cat_id: u64) -> Result<bool, TleStoreError> {
-        let affected = diesel::delete(tle::table.find(norad_cat_id as i64))
-            .execute(&mut self.connection)?;
+        let affected =
+            diesel::delete(tle::table.find(norad_cat_id as i64)).execute(&mut self.connection)?;
         Ok(affected > 0)
     }
 

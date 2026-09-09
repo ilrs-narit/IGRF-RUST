@@ -74,7 +74,7 @@ impl CoordinateZ {
             longitude,
             elevation,
         })
-    }    
+    }
     pub fn coordinate(self) -> Coordinate {
         Coordinate {
             latitude: self.latitude,
@@ -178,10 +178,9 @@ impl UtcDateTime {
     pub(crate) fn gmst_radians(self) -> f64 {
         let jd = self.julian_day();
         let t = (jd - 2_451_545.0) / 36_525.0;
-        let gmst_deg = 280.460_618_37
-            + 360.985_647_366_29 * (jd - 2_451_545.0)
-            + 0.000_387_933 * t * t
-            - t * t * t / 38_710_000.0;
+        let gmst_deg =
+            280.460_618_37 + 360.985_647_366_29 * (jd - 2_451_545.0) + 0.000_387_933 * t * t
+                - t * t * t / 38_710_000.0;
         gmst_deg.rem_euclid(360.0).to_radians()
     }
 }
@@ -252,7 +251,8 @@ impl GeomagnetismResult {
     /// computed value, rather than letting `atan2` evaluate at the origin.
     fn new(coordinate: CoordinateZ, date: UtcDateTime, x: f64, y: f64, z: f64) -> Self {
         const SMALLEST_POSITIVE_DENORMAL: f64 = f64::from_bits(1);
-        if x.abs() < SMALLEST_POSITIVE_DENORMAL * 2.0 || y.abs() < SMALLEST_POSITIVE_DENORMAL * 2.0 {
+        if x.abs() < SMALLEST_POSITIVE_DENORMAL * 2.0 || y.abs() < SMALLEST_POSITIVE_DENORMAL * 2.0
+        {
             return Self {
                 coordinate,
                 date,
