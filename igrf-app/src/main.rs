@@ -102,6 +102,8 @@ fn main() -> eframe::Result {
     let (config, config_problem) = AppConfig::load(CONFIG_PATH);
 
     let viewport = match config.display.mode {
+        // Borderless: no window-manager title bar for a finger to mis-tap, and
+        // `with_monitor` pins the fullscreen rect to the whole named screen.
         DisplayMode::Fullscreen => egui::ViewportBuilder::default()
             .with_fullscreen(true)
             .with_decorations(false)
@@ -114,10 +116,27 @@ fn main() -> eframe::Result {
             .with_min_inner_size([1024.0, 600.0]),
     };
 
-    let options = eframe::NativeOptions {
+    // `mut` is used only in the Linux-desktop block below.
+    #[allow(unused_mut)]
+    let mut options = eframe::NativeOptions {
         viewport,
         ..Default::default()
     };
+
+    // Run on X11 / XWayland rather than the native Wayland backend on Linux.
+    // winit's Wayland fullscreen keeps a client-side title-bar strip across the
+    // top of the screen on GNOME/Mutter; under X11 the window manager owns
+    // fullscreen and it covers the whole panel. Set IGRF_FORCE_WAYLAND=1 to
+    // opt back into the Wayland backend (e.g. on a HiDPI laptop where XWayland
+    // looks blurry).
+    #[cfg(all(unix, not(target_os = "macos")))]
+    if std::env::var_os("IGRF_FORCE_WAYLAND").is_none() {
+        options.event_loop_builder = Some(Box::new(|builder| {
+            use winit::platform::x11::EventLoopBuilderExtX11 as _;
+            builder.with_x11();
+        }));
+    }
+
     eframe::run_native(
         "IGRF control",
         options,
@@ -2542,9 +2561,7 @@ impl IgrfApp {
         ui.label(
             egui::RichText::new(
                 "Fullscreen with a UI scale above 1.0 suits an embedded 1024x600 touchscreen. \
-                 Monitor 0 is the only screen on a single-panel kiosk. If fullscreen still \
-                 leaves a blank strip at the top on GNOME/Wayland, launch under XWayland \
-                 (unset WAYLAND_DISPLAY) - see the README.",
+                 Monitor 0 is the only screen on a single-panel kiosk.",
             )
             .small()
             .weak(),
@@ -3677,6 +3694,9 @@ impl eframe::App for IgrfApp {
         if ctx.input(|input| input.key_pressed(egui::Key::F11)) {
             self.fullscreen = !self.fullscreen;
             if self.fullscreen {
+                // Drop decorations and fullscreen onto the named screen, so the
+                // window covers the whole panel with no title bar - matching
+                // how `Display.Mode = Fullscreen` builds the window at startup.
                 ctx.send_viewport_cmd(egui::ViewportCommand::Decorations(false));
                 ctx.send_viewport_cmd(egui::ViewportCommand::SetMonitor(
                     self.config.display.fullscreen_monitor,

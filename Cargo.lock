@@ -1304,6 +1304,7 @@ dependencies = [
  "igrf-io",
  "rfd",
  "serialport",
+ "winit",
 ]
 
 [[package]]

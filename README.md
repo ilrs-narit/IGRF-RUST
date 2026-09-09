@@ -34,13 +34,18 @@ Windows dev machine already has.
 There is a "Display" panel under the Settings tab to edit these without
 hand-editing the JSON. F11 toggles fullscreen at runtime.
 
-On GNOME/Wayland the fullscreen window is created with decorations off on
-purpose: winit draws the title bar client-side there, and left on it hides the
-bar in fullscreen but keeps its height as a blank strip across the top of the
-UI. If a strip still shows on some other compositor, launch the app under
-XWayland instead - `env -u WAYLAND_DISPLAY cargo run --release --package
-igrf-app`, or drop `WAYLAND_DISPLAY` from the kiosk's launcher - where
-server-side fullscreen is handled by the window manager.
+### Linux: X11 / XWayland by default
+
+On Linux the app forces the X11 backend (via XWayland when the session is
+Wayland). winit's native Wayland fullscreen draws the title bar client-side and,
+in fullscreen, hides it but keeps its height as a blank strip across the top of
+the screen; under X11 the window manager owns fullscreen and it covers the whole
+panel. Nothing to configure - `cargo run -r` and the kiosk launcher both get
+this.
+
+Set `IGRF_FORCE_WAYLAND=1` in the environment to opt back into the native
+Wayland backend (e.g. on a HiDPI laptop where XWayland looks blurry and you are
+not using fullscreen).
 
 ### On-screen keyboard (touchscreen)
 

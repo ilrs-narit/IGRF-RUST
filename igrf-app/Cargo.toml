@@ -33,3 +33,8 @@ eframe = { version = "0.36.1", default-features = false, features = [
   "x11",
   "wayland",
 ] }
+# Direct handle on winit (Cargo unifies it to the version eframe pins) so `main`
+# can force the X11 / XWayland backend - see the comment there. The `x11`
+# feature gates the extension trait used for that; defaults are off so this
+# does not pull winit's Wayland client-side-decoration renderer.
+winit = { version = "0.30", default-features = false, features = ["x11"] }
