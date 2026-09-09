@@ -17,3 +17,6 @@
 # it is written up in docs/controller-protocol.md instead.
 /test.bin
 __pycache__/
+
+.agents/
+.claude/
