@@ -104,6 +104,7 @@ fn main() -> eframe::Result {
     let viewport = match config.display.mode {
         DisplayMode::Fullscreen => egui::ViewportBuilder::default()
             .with_fullscreen(true)
+            .with_decorations(false)
             .with_monitor(config.display.fullscreen_monitor),
         // Fits the embedded 1024x600 panel by default. `with_min_inner_size` is
         // a floor, not a suggestion, so a small screen never gets a window it
@@ -2541,9 +2542,9 @@ impl IgrfApp {
         ui.label(
             egui::RichText::new(
                 "Fullscreen with a UI scale above 1.0 suits an embedded 1024x600 touchscreen. \
-                 If F11 fullscreen leaves the desktop top bar showing, the window landed as a \
-                 work-area maximise; try another monitor index (0 is the only screen on a \
-                 single-panel kiosk).",
+                 Monitor 0 is the only screen on a single-panel kiosk. If fullscreen still \
+                 leaves a blank strip at the top on GNOME/Wayland, launch under XWayland \
+                 (unset WAYLAND_DISPLAY) - see the README.",
             )
             .small()
             .weak(),
@@ -3676,13 +3677,13 @@ impl eframe::App for IgrfApp {
         if ctx.input(|input| input.key_pressed(egui::Key::F11)) {
             self.fullscreen = !self.fullscreen;
             if self.fullscreen {
-                // `SetMonitor` fullscreens onto a named screen, which covers
-                // the whole panel
+                ctx.send_viewport_cmd(egui::ViewportCommand::Decorations(false));
                 ctx.send_viewport_cmd(egui::ViewportCommand::SetMonitor(
                     self.config.display.fullscreen_monitor,
                 ));
             } else {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
+                ctx.send_viewport_cmd(egui::ViewportCommand::Decorations(true));
             }
         }
         ctx.request_repaint_after(UI_INTERVAL);
