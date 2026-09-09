@@ -102,7 +102,9 @@ fn main() -> eframe::Result {
     let (config, config_problem) = AppConfig::load(CONFIG_PATH);
 
     let viewport = match config.display.mode {
-        DisplayMode::Fullscreen => egui::ViewportBuilder::default().with_fullscreen(true),
+        DisplayMode::Fullscreen => egui::ViewportBuilder::default()
+            .with_fullscreen(true)
+            .with_monitor(config.display.fullscreen_monitor),
         // Fits the embedded 1024x600 panel by default. `with_min_inner_size` is
         // a floor, not a suggestion, so a small screen never gets a window it
         // cannot fit on either.
@@ -2499,9 +2501,11 @@ impl IgrfApp {
         });
     }
 
-    /// How the window is presented at startup. Both fields only take effect on
-    /// the next launch - the window already exists by the time this panel is
-    /// drawn - so the panel says so rather than pretending a save will reflow it.
+    /// How the window is presented. Mode and UI scale only take effect on the
+    /// next launch, since the window already exists by the time this panel is
+    /// drawn, so the panel says so rather than pretending a save will reflow
+    /// it. The monitor index is read fresh on every F11 press, so that one
+    /// applies as soon as it is changed.
     fn show_display_panel(&mut self, ui: &mut egui::Ui) {
         ui.label(egui::RichText::new("Window mode (applies on restart)").weak());
         ui.horizontal(|ui| {
@@ -2526,9 +2530,20 @@ impl IgrfApp {
                     .range(0.5..=3.0),
             );
         });
+        ui.horizontal(|ui| {
+            ui.label("Fullscreen monitor");
+            ui.add(
+                egui::DragValue::new(&mut self.config.display.fullscreen_monitor)
+                    .speed(0.1)
+                    .range(0..=16),
+            );
+        });
         ui.label(
             egui::RichText::new(
-                "Fullscreen with a UI scale above 1.0 suits an embedded 1024x600 touchscreen.",
+                "Fullscreen with a UI scale above 1.0 suits an embedded 1024x600 touchscreen. \
+                 If F11 fullscreen leaves the desktop top bar showing, the window landed as a \
+                 work-area maximise; try another monitor index (0 is the only screen on a \
+                 single-panel kiosk).",
             )
             .small()
             .weak(),
@@ -3660,7 +3675,15 @@ impl eframe::App for IgrfApp {
         self.tick_satellite_tracking();
         if ctx.input(|input| input.key_pressed(egui::Key::F11)) {
             self.fullscreen = !self.fullscreen;
-            ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(self.fullscreen));
+            if self.fullscreen {
+                // `SetMonitor` fullscreens onto a named screen, which covers
+                // the whole panel
+                ctx.send_viewport_cmd(egui::ViewportCommand::SetMonitor(
+                    self.config.display.fullscreen_monitor,
+                ));
+            } else {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Fullscreen(false));
+            }
         }
         ctx.request_repaint_after(UI_INTERVAL);
     }

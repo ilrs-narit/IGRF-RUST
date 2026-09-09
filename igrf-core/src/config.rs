@@ -246,6 +246,8 @@ pub struct DisplaySettings {
     /// 1.0 is the desktop default. Applies at startup.
     #[serde(rename = "UiScale", default = "default_ui_scale")]
     pub ui_scale: f32,
+    #[serde(rename = "FullscreenMonitor", default)]
+    pub fullscreen_monitor: usize,
 }
 
 impl Default for DisplaySettings {
@@ -253,6 +255,7 @@ impl Default for DisplaySettings {
         Self {
             mode: default_display_mode(),
             ui_scale: default_ui_scale(),
+            fullscreen_monitor: 0,
         }
     }
 }
