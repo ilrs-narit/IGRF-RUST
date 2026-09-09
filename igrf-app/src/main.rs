@@ -12,9 +12,9 @@ use igrf_core::satellite::{
 };
 use igrf_core::{
     contour_segments, field_from_magnitude, AppConfig, CalculationService, CalibrationSettings,
-    ContourSegment, FilterSettings, MapGrid, PidController, PidSettings, ProcessedData,
-    SatelliteEntry, SensorService, SetpointProfile, SlewLimiter, FIRMWARE_MAX_OUTPUT,
-    NOMINAL_TICK_SECONDS,
+    ContourSegment, DisplayMode, FilterSettings, MapGrid, PidController, PidSettings,
+    ProcessedData, SatelliteEntry, SensorService, SetpointProfile, SlewLimiter,
+    FIRMWARE_MAX_OUTPUT, NOMINAL_TICK_SECONDS,
 };
 use igrf_io::{
     fetch_object_type, write_controller_packet, ControllerReplyCounter, Credentials, CsvLogger,
@@ -97,16 +97,33 @@ fn main() -> eframe::Result {
     // environment variables still work, and so does an app that never fetches.
     let _ = dotenvy::dotenv();
 
-    let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
+    // The display mode and UI scale are read here, before the window exists,
+    // because they decide how the window is created.
+    let (config, config_problem) = AppConfig::load(CONFIG_PATH);
+
+    let viewport = match config.display.mode {
+        DisplayMode::Fullscreen => egui::ViewportBuilder::default().with_fullscreen(true),
+        // Fits the embedded 1024x600 panel by default. `with_min_inner_size` is
+        // a floor, not a suggestion, so a small screen never gets a window it
+        // cannot fit on either.
+        DisplayMode::Window => egui::ViewportBuilder::default()
             .with_inner_size([1024.0, 600.0])
             .with_min_inner_size([1024.0, 600.0]),
+    };
+
+    let options = eframe::NativeOptions {
+        viewport,
         ..Default::default()
     };
     eframe::run_native(
         "IGRF control",
         options,
-        Box::new(|cc| Ok(Box::new(IgrfApp::new(cc)))),
+        Box::new(move |cc| {
+            // A finger on a touchscreen needs bigger touch targets; the scale
+            // applies to fonts, buttons and spacing alike.
+            cc.egui_ctx.set_zoom_factor(config.display.ui_scale);
+            Ok(Box::new(IgrfApp::new(cc, config, config_problem)))
+        }),
     )
 }
 
@@ -357,11 +374,11 @@ impl SatSearchState {
 struct IgrfApp {
     config: AppConfig,
     sensor_port: String,
-    sensor_baud: String,
+    sensor_baud: u32,
     controller_port: String,
-    controller_baud: String,
+    controller_baud: u32,
     magson_ip: String,
-    magson_port: String,
+    magson_port: u16,
     log_path: String,
     available_ports: Vec<String>,
     lan_profiles: Vec<netcfg::LanProfile>,
@@ -391,13 +408,13 @@ struct IgrfApp {
     setpoint_server: SetpointServer,
     setpoint_receiver: Option<Receiver<[f64; 3]>>,
     last_setpoint_command: Option<Instant>,
-    setpoint_port: String,
+    setpoint_port: u16,
     setpoint_bind_address: String,
     profile: Option<SetpointProfile>,
     profile_path: String,
     profile_started: Option<Instant>,
-    slew_rate: String,
-    manual_magnitude: String,
+    slew_rate: f64,
+    manual_magnitude: f64,
     manual_setpoint_error: Option<String>,
 
     raw: [f64; 3],
@@ -438,8 +455,8 @@ struct IgrfApp {
     resume_pending: bool,
 
     logger: Option<CsvLogger>,
-    manual_lat: String,
-    manual_lon: String,
+    manual_lat: f64,
+    manual_lon: f64,
     manual_result: Option<GeomagnetismResult>,
     manual_error: Option<String>,
 
@@ -480,8 +497,11 @@ struct IgrfApp {
 }
 
 impl IgrfApp {
-    fn new(_cc: &eframe::CreationContext<'_>) -> Self {
-        let (config, config_problem) = AppConfig::load(CONFIG_PATH);
+    fn new(
+        _cc: &eframe::CreationContext<'_>,
+        config: AppConfig,
+        config_problem: Option<String>,
+    ) -> Self {
         let pid_settings = [
             config.pid_x.clone(),
             config.pid_y.clone(),
@@ -501,11 +521,11 @@ impl IgrfApp {
 
         let mut app = Self {
             sensor_port: config.sensor_port.clone(),
-            sensor_baud: config.sensor_baud.to_string(),
+            sensor_baud: config.sensor_baud,
             controller_port: config.controller_port.clone(),
-            controller_baud: config.controller_baud.to_string(),
+            controller_baud: config.controller_baud,
             magson_ip: config.sensor2_ip.clone(),
-            magson_port: config.sensor2_port.to_string(),
+            magson_port: config.sensor2_port as u16,
             log_path: "sensor_log.csv".to_owned(),
             available_ports,
             lan_profiles: netcfg::list_wired().unwrap_or_default(),
@@ -534,14 +554,14 @@ impl IgrfApp {
             last_setpoint_command: None,
             setpoint_bind_address: config.setpoint_source_bind_address.clone(),
             setpoint_port: if config.setpoint_source_port > 0 {
-                config.setpoint_source_port.to_string()
+                config.setpoint_source_port as u16
             } else {
-                "5005".to_owned()
+                5005
             },
             profile: None,
             profile_path: config.setpoint_profile_path.clone(),
             profile_started: None,
-            slew_rate: config.setpoint_slew_nt_per_second.to_string(),
+            slew_rate: config.setpoint_slew_nt_per_second,
 
             manual_setpoint_error: None,
             raw: [0.0; 3],
@@ -553,7 +573,9 @@ impl IgrfApp {
             outputs: [0.0; 3],
             history: PlotHistory::default(),
             follow_plots: true,
-            fullscreen: true,
+            // Start from what the config asked for, so the F11 toggle and the
+            // `Display.Mode` setting agree on the first press.
+            fullscreen: config.display.mode == DisplayMode::Fullscreen,
             cage: cage::CageView::default(),
             started_at: Instant::now(),
             last_pid_tick: Instant::now(),
@@ -573,9 +595,9 @@ impl IgrfApp {
             logger: None,
 
             // Default lat/lon value in manual magnetism calculator to Chiang Mai, Thailand
-            manual_lat: "18.8524".to_owned(),
-            manual_lon: "98.957478".to_owned(),
-            manual_magnitude: "0".to_owned(),
+            manual_lat: 18.8524,
+            manual_lon: 98.957478,
+            manual_magnitude: 0.0,
             manual_result: None,
             manual_error: None,
             map_grid_path: String::new(),
@@ -726,17 +748,15 @@ impl IgrfApp {
     }
 
     fn connect_sensor(&mut self) {
-        let baud = match parse_baud(&self.sensor_baud) {
-            Ok(value) => value,
-            Err(error) => {
-                self.set_error(format!("Sensor baud: {error}"));
-                return;
-            }
-        };
+        if self.sensor_baud == 0 {
+            self.set_error("Sensor baud must be greater than zero");
+            return;
+        }
         if self.sensor_port.trim().is_empty() {
             self.set_error("Sensor port is empty");
             return;
         }
+        let baud = self.sensor_baud;
         match self.sensor_manager.connect(self.sensor_port.trim(), baud) {
             Ok(()) => {
                 self.last_handshake = None;
@@ -769,17 +789,15 @@ impl IgrfApp {
     }
 
     fn connect_controller(&mut self) {
-        let baud = match parse_baud(&self.controller_baud) {
-            Ok(value) => value,
-            Err(error) => {
-                self.set_error(format!("Controller baud: {error}"));
-                return;
-            }
-        };
+        if self.controller_baud == 0 {
+            self.set_error("Controller baud must be greater than zero");
+            return;
+        }
         if self.controller_port.trim().is_empty() {
             self.set_error("Controller port is empty");
             return;
         }
+        let baud = self.controller_baud;
         match self
             .controller_manager
             .connect(self.controller_port.trim(), baud)
@@ -823,17 +841,15 @@ impl IgrfApp {
     }
 
     fn connect_magson(&mut self) {
-        let port = match parse_tcp_port(&self.magson_port) {
-            Ok(value) => value,
-            Err(error) => {
-                self.set_error(format!("Magson port: {error}"));
-                return;
-            }
-        };
+        if self.magson_port == 0 {
+            self.set_error("Magson port must be greater than zero");
+            return;
+        }
         if self.magson_ip.trim().is_empty() {
             self.set_error("Magson IP/host is empty");
             return;
         }
+        let port = self.magson_port;
         match self.magson_client.connect(self.magson_ip.trim(), port) {
             Ok(receiver) => {
                 self.magson_receiver = Some(receiver);
@@ -959,9 +975,10 @@ impl IgrfApp {
         }
         self.last_controller_reconnect = Some(Instant::now());
         let port = self.controller_port.trim().to_owned();
-        let Ok(baud) = parse_baud(&self.controller_baud) else {
+        if self.controller_baud == 0 {
             return;
-        };
+        }
+        let baud = self.controller_baud;
         if self.controller_manager.connect(&port, baud).is_err() {
             return;
         }
@@ -1219,13 +1236,11 @@ impl IgrfApp {
     }
 
     fn start_setpoint_server(&mut self) {
-        let port = match parse_tcp_port(&self.setpoint_port) {
-            Ok(value) => value,
-            Err(error) => {
-                self.set_error(format!("Setpoint port: {error}"));
-                return;
-            }
-        };
+        if self.setpoint_port == 0 {
+            self.set_error("Setpoint port must be greater than zero");
+            return;
+        }
+        let port = self.setpoint_port;
         let address = match self.setpoint_bind_address.trim() {
             "" => DEFAULT_BIND_ADDRESS.to_owned(),
             chosen => chosen.to_owned(),
@@ -1284,7 +1299,10 @@ impl IgrfApp {
     /// of three hand-computed components.
     fn apply_manual_magnitude(&mut self) {
         let result = (|| {
-            let magnitude = parse_f64(&self.manual_magnitude, "magnitude")?;
+            let magnitude = self.manual_magnitude;
+            if !magnitude.is_finite() || magnitude < 0.0 {
+                return Err("magnitude must be a non-negative number".to_owned());
+            }
             let wmm = self
                 .manual_result
                 .ok_or_else(|| "run the WMM2025 calculation first".to_owned())?;
@@ -1301,8 +1319,7 @@ impl IgrfApp {
                 self.command_setpoint(field);
                 self.set_status(format!(
                     "Commanded |B| {:.1} nT along the WMM direction; ramping at {:.0} nT/s",
-                    self.manual_magnitude.trim().parse::<f64>().unwrap_or(0.0),
-                    self.config.setpoint_slew_nt_per_second
+                    self.manual_magnitude, self.config.setpoint_slew_nt_per_second
                 ));
             }
             Err(problem) => self.manual_setpoint_error = Some(problem),
@@ -1571,27 +1588,18 @@ impl IgrfApp {
     }
 
     fn save_config(&mut self) {
-        let sensor_baud = match parse_baud(&self.sensor_baud) {
-            Ok(value) => value,
-            Err(error) => {
-                self.set_error(format!("Cannot save sensor baud: {error}"));
-                return;
-            }
-        };
-        let controller_baud = match parse_baud(&self.controller_baud) {
-            Ok(value) => value,
-            Err(error) => {
-                self.set_error(format!("Cannot save controller baud: {error}"));
-                return;
-            }
-        };
-        let magson_port = match parse_tcp_port(&self.magson_port) {
-            Ok(value) => value,
-            Err(error) => {
-                self.set_error(format!("Cannot save Magson port: {error}"));
-                return;
-            }
-        };
+        if self.sensor_baud == 0 {
+            self.set_error("Cannot save: sensor baud must be greater than zero");
+            return;
+        }
+        if self.controller_baud == 0 {
+            self.set_error("Cannot save: controller baud must be greater than zero");
+            return;
+        }
+        if self.magson_port == 0 {
+            self.set_error("Cannot save: Magson port must be greater than zero");
+            return;
+        }
         self.config.pid_x = self.pid_settings[0].clone();
         self.config.pid_y = self.pid_settings[1].clone();
         self.config.pid_z = self.pid_settings[2].clone();
@@ -1599,17 +1607,15 @@ impl IgrfApp {
         self.config.filter_y = self.filter_settings[1].clone();
         self.config.filter_z = self.filter_settings[2].clone();
         self.config.sensor_port = self.sensor_port.clone();
-        self.config.sensor_baud = sensor_baud;
+        self.config.sensor_baud = self.sensor_baud;
         self.config.controller_port = self.controller_port.clone();
-        self.config.controller_baud = controller_baud;
+        self.config.controller_baud = self.controller_baud;
         self.config.sensor2_ip = self.magson_ip.clone();
-        self.config.sensor2_port = i32::from(magson_port);
+        self.config.sensor2_port = i32::from(self.magson_port);
         self.config.calibration = self.calibration.clone();
         self.config.setpoint_profile_path = self.profile_path.clone();
         self.config.setpoint_source_bind_address = self.setpoint_bind_address.clone();
-        self.config.setpoint_source_port = parse_tcp_port(&self.setpoint_port)
-            .map(i32::from)
-            .unwrap_or(0);
+        self.config.setpoint_source_port = i32::from(self.setpoint_port);
         self.config.satellites = self
             .tracked_satellites
             .iter()
@@ -1653,11 +1659,11 @@ impl IgrfApp {
     fn load_config(&mut self) {
         let (config, problem) = AppConfig::load(CONFIG_PATH);
         self.sensor_port = config.sensor_port.clone();
-        self.sensor_baud = config.sensor_baud.to_string();
+        self.sensor_baud = config.sensor_baud;
         self.controller_port = config.controller_port.clone();
-        self.controller_baud = config.controller_baud.to_string();
+        self.controller_baud = config.controller_baud;
         self.magson_ip = config.sensor2_ip.clone();
-        self.magson_port = config.sensor2_port.to_string();
+        self.magson_port = config.sensor2_port as u16;
         self.pid_settings = [
             config.pid_x.clone(),
             config.pid_y.clone(),
@@ -1684,10 +1690,10 @@ impl IgrfApp {
         self.elevation_mask_deg = config.elevation_mask_deg;
 
         self.profile_path = config.setpoint_profile_path.clone();
-        self.slew_rate = config.setpoint_slew_nt_per_second.to_string();
+        self.slew_rate = config.setpoint_slew_nt_per_second;
         self.setpoint_bind_address = config.setpoint_source_bind_address.clone();
         if config.setpoint_source_port > 0 {
-            self.setpoint_port = config.setpoint_source_port.to_string();
+            self.setpoint_port = config.setpoint_source_port as u16;
         }
         // A loaded config brings its own setpoints; start the ramp there
         // rather than sweeping from wherever the last one left off.
@@ -1744,8 +1750,8 @@ impl IgrfApp {
     /// Calculate Magnetism
     fn calculate_manual_wmm(&mut self) {
         let result = (|| {
-            let latitude = parse_f64(&self.manual_lat, "latitude")?;
-            let longitude = parse_f64(&self.manual_lon, "longitude")?;
+            let latitude = self.manual_lat;
+            let longitude = self.manual_lon;
             let coordinate =
                 Coordinate::new(latitude, longitude).map_err(|error| error.to_string())?;
             let now = chrono::Utc::now();
@@ -2251,6 +2257,12 @@ impl IgrfApp {
                 if ui.button("Master reset").clicked() {
                     self.master_reset();
                 }
+                // In borderless fullscreen there is no title-bar close button,
+                // so the app has to offer its own exit. Closing runs `Drop`,
+                // which zeroes the coils before the process goes away.
+                if ui.button("Exit").clicked() {
+                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
+                }
             });
         });
     }
@@ -2272,7 +2284,11 @@ impl IgrfApp {
         );
         ui.horizontal(|ui| {
             ui.label("Baud");
-            ui.add(egui::TextEdit::singleline(&mut self.sensor_baud).desired_width(64.0));
+            ui.add(
+                egui::DragValue::new(&mut self.sensor_baud)
+                    .speed(100.0)
+                    .range(1..=u32::MAX),
+            );
             if ui.button("Connect").clicked() {
                 self.connect_sensor();
             }
@@ -2308,7 +2324,11 @@ impl IgrfApp {
         );
         ui.horizontal(|ui| {
             ui.label("Baud");
-            ui.add(egui::TextEdit::singleline(&mut self.controller_baud).desired_width(64.0));
+            ui.add(
+                egui::DragValue::new(&mut self.controller_baud)
+                    .speed(100.0)
+                    .range(1..=u32::MAX),
+            );
             if ui.button("Connect").clicked() {
                 self.connect_controller();
             }
@@ -2349,7 +2369,11 @@ impl IgrfApp {
         });
         ui.horizontal(|ui| {
             ui.label("Port");
-            ui.add(egui::TextEdit::singleline(&mut self.magson_port).desired_width(64.0));
+            ui.add(
+                egui::DragValue::new(&mut self.magson_port)
+                    .speed(1.0)
+                    .range(1..=u16::MAX),
+            );
             if ui.button("Connect").clicked() {
                 self.connect_magson();
             }
@@ -2475,6 +2499,42 @@ impl IgrfApp {
         });
     }
 
+    /// How the window is presented at startup. Both fields only take effect on
+    /// the next launch - the window already exists by the time this panel is
+    /// drawn - so the panel says so rather than pretending a save will reflow it.
+    fn show_display_panel(&mut self, ui: &mut egui::Ui) {
+        ui.label(egui::RichText::new("Window mode (applies on restart)").weak());
+        ui.horizontal(|ui| {
+            for mode in [DisplayMode::Window, DisplayMode::Fullscreen] {
+                let label = match mode {
+                    DisplayMode::Window => "Window",
+                    DisplayMode::Fullscreen => "Fullscreen borderless",
+                };
+                if ui
+                    .selectable_label(self.config.display.mode == mode, label)
+                    .clicked()
+                {
+                    self.config.display.mode = mode;
+                }
+            }
+        });
+        ui.horizontal(|ui| {
+            ui.label("UI scale");
+            ui.add(
+                egui::DragValue::new(&mut self.config.display.ui_scale)
+                    .speed(0.05)
+                    .range(0.5..=3.0),
+            );
+        });
+        ui.label(
+            egui::RichText::new(
+                "Fullscreen with a UI scale above 1.0 suits an embedded 1024x600 touchscreen.",
+            )
+            .small()
+            .weak(),
+        );
+    }
+
     /// Setpoint command panel: where the field comes from and how fast it may
     /// change. Everything here is nanotesla.
     fn show_setpoint_panel(&mut self, ui: &mut egui::Ui) {
@@ -2511,16 +2571,14 @@ impl IgrfApp {
 
         ui.horizontal(|ui| {
             ui.label("Slew nT/s");
-            ui.add(egui::TextEdit::singleline(&mut self.slew_rate).desired_width(70.0));
-            if ui.button("Set").clicked() {
-                match parse_f64(&self.slew_rate, "slew rate") {
-                    Ok(rate) if rate > 0.0 => {
-                        self.config.setpoint_slew_nt_per_second = rate;
-                        self.set_status(format!("Setpoint ramps at {rate:.0} nT/s"));
-                    }
-                    Ok(_) => self.set_error("Slew rate must be above zero"),
-                    Err(error) => self.set_error(format!("Slew rate: {error}")),
-                }
+            let response = ui.add(
+                egui::DragValue::new(&mut self.slew_rate)
+                    .speed(100.0)
+                    .range(1.0..=1e6),
+            );
+            if response.changed() {
+                self.config.setpoint_slew_nt_per_second = self.slew_rate;
+                self.set_status(format!("Setpoint ramps at {:.0} nT/s", self.slew_rate));
             }
         });
 
@@ -2531,7 +2589,9 @@ impl IgrfApp {
                 ui.horizontal(|ui| {
                     ui.label("|B| nT");
                     ui.add(
-                        egui::TextEdit::singleline(&mut self.manual_magnitude).desired_width(80.0),
+                        egui::DragValue::new(&mut self.manual_magnitude)
+                            .speed(1000.0)
+                            .range(0.0..=1e6),
                     );
                     if ui.button("Command").clicked() {
                         self.apply_manual_magnitude();
@@ -2604,7 +2664,11 @@ impl IgrfApp {
                 ui.separator();
                 ui.horizontal(|ui| {
                     ui.label("UDP port");
-                    ui.add(egui::TextEdit::singleline(&mut self.setpoint_port).desired_width(64.0));
+                    ui.add(
+                        egui::DragValue::new(&mut self.setpoint_port)
+                            .speed(1.0)
+                            .range(1..=u16::MAX),
+                    );
                     ui.label("Bind");
                     ui.add(
                         egui::TextEdit::singleline(&mut self.setpoint_bind_address)
@@ -2684,14 +2748,20 @@ impl IgrfApp {
         egui::Grid::new("manual-wmm-grid")
             .num_columns(2)
             .show(ui, |ui| {
-                for (label, value) in [
-                    ("Latitude", &mut self.manual_lat),
-                    ("Longitude", &mut self.manual_lon),
-                ] {
-                    ui.label(label);
-                    ui.text_edit_singleline(value);
-                    ui.end_row();
-                }
+                ui.label("Latitude");
+                ui.add(
+                    egui::DragValue::new(&mut self.manual_lat)
+                        .speed(0.01)
+                        .range(-90.0..=90.0),
+                );
+                ui.end_row();
+                ui.label("Longitude");
+                ui.add(
+                    egui::DragValue::new(&mut self.manual_lon)
+                        .speed(0.01)
+                        .range(-180.0..=180.0),
+                );
+                ui.end_row();
             });
         if ui.button("Calculate Magnetism").clicked() {
             self.calculate_manual_wmm();
@@ -3272,7 +3342,10 @@ impl IgrfApp {
             let running = self.pid_running[axis];
             ui.horizontal(|ui| {
                 status_pill(ui, &format!("Axis {label}"), LinkState::from_open(running));
-                if ui.small_button(if running { "Pause" } else { "Start" }).clicked() {
+                if ui
+                    .small_button(if running { "Pause" } else { "Start" })
+                    .clicked()
+                {
                     self.pid_running[axis] = !running;
                     if !self.pid_running[axis] {
                         pause = true;
@@ -3418,7 +3491,7 @@ impl IgrfApp {
             self.command_setpoint(field);
         }
     }
-    
+
     fn show_control_columns(&mut self, ui: &mut egui::Ui) {
         if !fits_columns(ui, 3) {
             egui::ScrollArea::vertical()
@@ -3633,6 +3706,9 @@ impl eframe::App for IgrfApp {
                                 egui::CollapsingHeader::new("LAN static IP")
                                     .default_open(false)
                                     .show(&mut cols[0], |ui| self.show_lan_panel(ui));
+                                egui::CollapsingHeader::new("Display")
+                                    .default_open(false)
+                                    .show(&mut cols[0], |ui| self.show_display_panel(ui));
 
                                 egui::CollapsingHeader::new("Setpoint command")
                                     .default_open(true)
@@ -3926,40 +4002,4 @@ fn show_plot(
                     .line(Line::new(*name, PlotPoints::new(history.points.clone())).color(*color));
             }
         });
-}
-
-fn parse_f64(value: &str, label: &str) -> Result<f64, String> {
-    let value = value
-        .trim()
-        .parse::<f64>()
-        .map_err(|_| format!("{label} must be a number"))?;
-    if value.is_finite() {
-        Ok(value)
-    } else {
-        Err(format!("{label} must be finite"))
-    }
-}
-
-fn parse_baud(value: &str) -> Result<u32, String> {
-    let baud = value
-        .trim()
-        .parse::<u32>()
-        .map_err(|_| "must be a positive integer".to_owned())?;
-    if baud == 0 {
-        Err("must be greater than zero".to_owned())
-    } else {
-        Ok(baud)
-    }
-}
-
-fn parse_tcp_port(value: &str) -> Result<u16, String> {
-    let port = value
-        .trim()
-        .parse::<u16>()
-        .map_err(|_| "must be an integer from 1 to 65535".to_owned())?;
-    if port == 0 {
-        Err("must be greater than zero".to_owned())
-    } else {
-        Ok(port)
-    }
 }

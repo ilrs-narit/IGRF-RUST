@@ -72,5 +72,9 @@
   "SensorPort": "/dev/ttyUSB0",
   "SensorBaud": 9600,
   "ControllerPort": "/dev/ttyACM0",
-  "ControllerBaud": 9600
+  "ControllerBaud": 9600,
+  "Display": {
+    "Mode": "Window",
+    "UiScale": 1.0
+  }
 }

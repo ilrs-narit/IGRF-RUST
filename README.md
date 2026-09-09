@@ -16,6 +16,42 @@ Edit `SystemConfig.json` for the serial ports, Magson address, PID values,
 sensor calibration and setpoint source. The local config and generated logs are
 intentionally ignored by Git.
 
+## Platform support and display
+
+The app builds and runs on Linux (x86_64 and aarch64) and Windows. The Linux
+build needs the usual GUI toolchain packages (see `release.yml`); the Windows
+build needs a C toolchain for the bundled SQLite/OpenGL dependencies, which any
+Windows dev machine already has.
+
+`Display` in `SystemConfig.json` controls how the window is presented at
+startup (both fields apply on the next launch):
+
+| Field | Meaning |
+| --- | --- |
+| `Mode` | `Window` (default) opens a normal desktop window; `Fullscreen` opens borderless fullscreen, which is what an embedded 1024x600 touch panel (a LattePanda) wants. |
+| `UiScale` | Global UI zoom factor. `1.0` is the desktop default; a value above `1.0` enlarges fonts, buttons and spacing for finger touch. `0.5` to `3.0`. |
+
+There is a "Display" panel under the Settings tab to edit these without
+hand-editing the JSON.
+
+### On-screen keyboard (touchscreen)
+
+egui does not tell the OS when a text field is focused, so an on-screen keyboard
+will not pop up on its own. The app avoids needing one during operation: the
+Control screen uses draggable number fields everywhere, and the remaining text
+fields (serial ports, IPs, file paths, TLE lines) are one-time setup, best edited
+in `SystemConfig.json` or with a keyboard.
+
+When a keyboard is genuinely needed, set up the OS-level one:
+
+- **Linux**: `tools/setup-onscreen-keyboard.sh` installs and configures
+  `onboard` (X11) or `wvkbd` (Wayland) and adds an autostart entry.
+- **Windows**: enable the Touch Keyboard (`TabTip.exe`) and set "Show the touch
+  keyboard when not in tablet mode".
+
+Because egui never triggers auto-show, plan for the keyboard to be always
+visible (docked `onboard`) or toggled by a hotkey/button (`wvkbd`).
+
 ## Units
 
 Every field value in the app, the plots and the CSV is **nanotesla**. Raw ADC

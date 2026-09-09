@@ -214,6 +214,49 @@ pub struct SatelliteEntry {
     pub line2: String,
 }
 
+/// How the app presents its window at startup.
+///
+/// `Window` keeps a normal desktop window. `Fullscreen` opens borderless
+/// fullscreen, which is what an embedded touch panel (a LattePanda on a
+/// 1024x600 screen) wants: no title bar or task bar, and no window chrome for
+/// a finger to mis-tap. The mode is read once at launch, so a change here needs
+/// a restart to take effect.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub enum DisplayMode {
+    Window,
+    Fullscreen,
+}
+
+fn default_display_mode() -> DisplayMode {
+    DisplayMode::Window
+}
+
+fn default_ui_scale() -> f32 {
+    1.0
+}
+
+/// Presentation settings for the main window.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DisplaySettings {
+    #[serde(rename = "Mode", default = "default_display_mode")]
+    pub mode: DisplayMode,
+    /// Global UI zoom factor. Above 1.0 makes everything (fonts, buttons,
+    /// spacing) larger, which is what a finger on a 1024x600 touchscreen needs;
+    /// 1.0 is the desktop default. Applies at startup.
+    #[serde(rename = "UiScale", default = "default_ui_scale")]
+    pub ui_scale: f32,
+}
+
+impl Default for DisplaySettings {
+    fn default() -> Self {
+        Self {
+            mode: default_display_mode(),
+            ui_scale: default_ui_scale(),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct AppConfig {
     #[serde(rename = "PidX", default)]
@@ -264,6 +307,10 @@ pub struct AppConfig {
     /// Minimum elevation, degrees above the horizon, counted as AOS.
     #[serde(rename = "ElevationMaskDeg", default = "default_elevation_mask")]
     pub elevation_mask_deg: f64,
+    /// How the window is presented at startup (windowed or borderless
+    /// fullscreen) and how large the UI is drawn.
+    #[serde(rename = "Display", default)]
+    pub display: DisplaySettings,
 }
 
 fn default_sensor2_ip() -> String {
@@ -334,6 +381,7 @@ impl Default for AppConfig {
             station_latitude: default_station_latitude(),
             station_longitude: default_station_longitude(),
             elevation_mask_deg: default_elevation_mask(),
+            display: DisplaySettings::default(),
         }
     }
 }
@@ -388,6 +436,9 @@ impl AppConfig {
         if !self.elevation_mask_deg.is_finite() || !(0.0..=90.0).contains(&self.elevation_mask_deg)
         {
             self.elevation_mask_deg = default_elevation_mask();
+        }
+        if !self.display.ui_scale.is_finite() || !(0.5..=3.0).contains(&self.display.ui_scale) {
+            self.display.ui_scale = default_ui_scale();
         }
         clamped
     }
@@ -683,5 +734,25 @@ mod tests {
         assert_eq!(config.pid_x.max_output, 100.0);
         assert_eq!(config.sensor2_port, 1234);
         assert_eq!(config.sensor_baud, 9600);
+    }
+
+    /// `Display` arrived after the original fields, so a config written before
+    /// it must still load and land on a windowed 1.0 scale rather than on
+    /// something unusable.
+    #[test]
+    fn a_config_without_a_display_block_takes_the_windowed_default() {
+        let settings: DisplaySettings = serde_json::from_str("{}").unwrap();
+        assert_eq!(settings, DisplaySettings::default());
+
+        let mut config = AppConfig::default();
+        config.display.mode = DisplayMode::Fullscreen;
+        config.display.ui_scale = f64::NAN as f32;
+        config.sanitize();
+        assert_eq!(config.display.mode, DisplayMode::Fullscreen);
+        assert_eq!(config.display.ui_scale, 1.0);
+
+        config.display.ui_scale = 4.0;
+        config.sanitize();
+        assert_eq!(config.display.ui_scale, 1.0);
     }
 }
