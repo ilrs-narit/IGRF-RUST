@@ -1294,7 +1294,7 @@ dependencies = [
 
 [[package]]
 name = "igrf-app"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "chrono",
  "dotenvy",
@@ -1309,7 +1309,7 @@ dependencies = [
 
 [[package]]
 name = "igrf-core"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "chrono",
  "serde",
@@ -1319,7 +1319,7 @@ dependencies = [
 
 [[package]]
 name = "igrf-io"
-version = "0.4.1"
+version = "0.5.0"
 dependencies = [
  "chrono",
  "diesel",
