@@ -270,6 +270,14 @@ line, then push to `main`.
 - `v0.x.0`: new features or configuration fields
 - `v1.0.0`: stable hardware/protocol contract
 
+`v0.5.0` adds a SQLite-backed satellite catalog. Element sets fetched from
+Space-Track - by object type, using the account credentials configured for the
+app - are stored in a local `tle_data.db` and searched and filtered in-app, and
+a preset or already-tracked satellite is built from the freshest stored element
+set for its NORAD catalog number rather than the baked-in lines. It also adds a
+Display panel (window or borderless fullscreen, target monitor, UI scale) for
+the embedded touch panel, and gathers the settings into a Settings tab.
+
 `v0.4.1` recovers the Magson stream after a lost byte instead of dropping it
 silently for the rest of the run, reports output limits that are lopsided
 enough to be a typo, and adds `--measure-gain` to `tools/probe-controller.py`.
