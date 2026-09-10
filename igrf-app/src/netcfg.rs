@@ -5,7 +5,10 @@
 //! interface that currently carries the default route: a typo there would take
 //! the machine off the network with no way back from inside the app.
 
+use crate::IgrfApp;
 use std::net::Ipv4Addr;
+use std::sync::mpsc;
+use std::thread;
 
 /// One wired NetworkManager profile and how its IPv4 is configured right now.
 #[derive(Debug, Clone, PartialEq)]
@@ -401,5 +404,85 @@ mod platform {
 
     pub fn set_dhcp(_: &LanProfile) -> Result<(), String> {
         Err(UNSUPPORTED.to_owned())
+    }
+}
+
+impl IgrfApp {
+    pub(crate) fn refresh_lan(&mut self) {
+        match list_wired() {
+            Ok(profiles) => {
+                self.lan_profiles = profiles;
+                self.lan_selected = self
+                    .lan_selected
+                    .min(self.lan_profiles.len().saturating_sub(1));
+                if self.lan_cidr.trim().is_empty() {
+                    self.lan_cidr = self
+                        .lan_profiles
+                        .get(self.lan_selected)
+                        .map(|profile| profile.addresses.clone())
+                        .unwrap_or_default();
+                }
+            }
+            Err(error) => self.set_error(format!("Cannot list LAN profiles: {error}")),
+        }
+    }
+
+    /// nmcli takes seconds to bring a profile back up, so the work runs off the
+    /// UI thread and the result is picked up in `poll_io`.
+    pub(crate) fn spawn_lan_task<F>(&mut self, task: F)
+    where
+        F: FnOnce() -> Result<String, String> + Send + 'static,
+    {
+        if self.lan_task.is_some() {
+            return;
+        }
+        let (sender, receiver) = mpsc::channel();
+        self.lan_task = Some(receiver);
+        thread::spawn(move || {
+            let _ = sender.send(task());
+        });
+        self.set_status("Applying LAN configuration...");
+    }
+
+    pub(crate) fn apply_lan_static(&mut self) {
+        let Some(target) = self.lan_profiles.get(self.lan_selected).cloned() else {
+            self.set_error("No LAN profile selected");
+            return;
+        };
+        let cidr = self.lan_cidr.trim().to_owned();
+        if let Err(error) = validate_cidr(&cidr) {
+            self.set_error(format!("LAN address: {error}"));
+            return;
+        }
+        self.spawn_lan_task(move || apply_static(&target, &cidr));
+    }
+
+    pub(crate) fn apply_lan_dhcp(&mut self) {
+        let Some(target) = self.lan_profiles.get(self.lan_selected).cloned() else {
+            self.set_error("No LAN profile selected");
+            return;
+        };
+        self.spawn_lan_task(move || apply_dhcp(&target));
+    }
+
+    pub(crate) fn poll_lan_task(&mut self) {
+        let Some(receiver) = &self.lan_task else {
+            return;
+        };
+        match receiver.try_recv() {
+            Ok(result) => {
+                self.lan_task = None;
+                match result {
+                    Ok(message) => self.set_status(message),
+                    Err(error) => self.set_error(format!("LAN: {error}")),
+                }
+                self.refresh_lan();
+            }
+            Err(mpsc::TryRecvError::Empty) => {}
+            Err(mpsc::TryRecvError::Disconnected) => {
+                self.lan_task = None;
+                self.set_error("LAN task ended without a result");
+            }
+        }
     }
 }

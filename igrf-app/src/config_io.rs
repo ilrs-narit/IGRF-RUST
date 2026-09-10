@@ -174,4 +174,29 @@ impl IgrfApp {
             )
         })
     }
+
+    pub(crate) fn apply_calibration(&mut self) {
+        self.calibration.sanitize();
+        self.sensor_service.calibration = self.calibration.clone();
+    }
+
+    pub(crate) fn apply_filter_settings(&mut self) {
+        for (axis, name) in AXES.into_iter().enumerate() {
+            let settings = self.filter_settings[axis].clone();
+            if self
+                .calculation
+                .set_noise(axis, settings.q, settings.r)
+                .is_err()
+                || self
+                    .calculation
+                    .set_spike_threshold(axis, settings.spike_nt)
+                    .is_err()
+            {
+                self.filter_settings[axis].sanitize();
+                self.set_error(format!(
+                    "Filter {name}: Q, R and spike must be finite and above zero; restored defaults"
+                ));
+            }
+        }
+    }
 }

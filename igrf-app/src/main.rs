@@ -31,8 +31,7 @@ use igrf_io::{
     SetpointServer,
 };
 use std::path::PathBuf;
-use std::sync::mpsc::{self, Receiver};
-use std::thread;
+use std::sync::mpsc::Receiver;
 use std::time::{Duration, Instant, SystemTime};
 
 const CONFIG_PATH: &str = "SystemConfig.json";
@@ -476,109 +475,6 @@ impl IgrfApp {
                 ));
             }
             Err(error) => self.set_error(format!("Cannot list serial ports: {error}")),
-        }
-    }
-
-    fn refresh_lan(&mut self) {
-        match netcfg::list_wired() {
-            Ok(profiles) => {
-                self.lan_profiles = profiles;
-                self.lan_selected = self
-                    .lan_selected
-                    .min(self.lan_profiles.len().saturating_sub(1));
-                if self.lan_cidr.trim().is_empty() {
-                    self.lan_cidr = self
-                        .lan_profiles
-                        .get(self.lan_selected)
-                        .map(|profile| profile.addresses.clone())
-                        .unwrap_or_default();
-                }
-            }
-            Err(error) => self.set_error(format!("Cannot list LAN profiles: {error}")),
-        }
-    }
-
-    /// nmcli takes seconds to bring a profile back up, so the work runs off the
-    /// UI thread and the result is picked up in `poll_io`.
-    fn spawn_lan_task<F>(&mut self, task: F)
-    where
-        F: FnOnce() -> Result<String, String> + Send + 'static,
-    {
-        if self.lan_task.is_some() {
-            return;
-        }
-        let (sender, receiver) = mpsc::channel();
-        self.lan_task = Some(receiver);
-        thread::spawn(move || {
-            let _ = sender.send(task());
-        });
-        self.set_status("Applying LAN configuration...");
-    }
-
-    fn apply_lan_static(&mut self) {
-        let Some(target) = self.lan_profiles.get(self.lan_selected).cloned() else {
-            self.set_error("No LAN profile selected");
-            return;
-        };
-        let cidr = self.lan_cidr.trim().to_owned();
-        if let Err(error) = netcfg::validate_cidr(&cidr) {
-            self.set_error(format!("LAN address: {error}"));
-            return;
-        }
-        self.spawn_lan_task(move || netcfg::apply_static(&target, &cidr));
-    }
-
-    fn apply_lan_dhcp(&mut self) {
-        let Some(target) = self.lan_profiles.get(self.lan_selected).cloned() else {
-            self.set_error("No LAN profile selected");
-            return;
-        };
-        self.spawn_lan_task(move || netcfg::apply_dhcp(&target));
-    }
-
-    fn poll_lan_task(&mut self) {
-        let Some(receiver) = &self.lan_task else {
-            return;
-        };
-        match receiver.try_recv() {
-            Ok(result) => {
-                self.lan_task = None;
-                match result {
-                    Ok(message) => self.set_status(message),
-                    Err(error) => self.set_error(format!("LAN: {error}")),
-                }
-                self.refresh_lan();
-            }
-            Err(mpsc::TryRecvError::Empty) => {}
-            Err(mpsc::TryRecvError::Disconnected) => {
-                self.lan_task = None;
-                self.set_error("LAN task ended without a result");
-            }
-        }
-    }
-
-    fn apply_calibration(&mut self) {
-        self.calibration.sanitize();
-        self.sensor_service.calibration = self.calibration.clone();
-    }
-
-    fn apply_filter_settings(&mut self) {
-        for (axis, name) in AXES.into_iter().enumerate() {
-            let settings = self.filter_settings[axis].clone();
-            if self
-                .calculation
-                .set_noise(axis, settings.q, settings.r)
-                .is_err()
-                || self
-                    .calculation
-                    .set_spike_threshold(axis, settings.spike_nt)
-                    .is_err()
-            {
-                self.filter_settings[axis].sanitize();
-                self.set_error(format!(
-                    "Filter {name}: Q, R and spike must be finite and above zero; restored defaults"
-                ));
-            }
         }
     }
 }
