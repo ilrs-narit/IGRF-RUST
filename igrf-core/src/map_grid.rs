@@ -42,7 +42,10 @@ impl MapGrid {
                 let Some(value) = values.get(col * step) else {
                     break;
                 };
-                data[col][row] = value.trim().parse().unwrap_or(0.0);
+                // A cell that will not parse is missing, not 0 nT: 0.0 would
+                // draw phantom contour features. `contour_segments` skips
+                // non-finite cells, so NaN hides the hole instead.
+                data[col][row] = value.trim().parse().unwrap_or(f64::NAN);
             }
         }
 

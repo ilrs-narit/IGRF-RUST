@@ -1,5 +1,20 @@
 mod cage;
+mod control_helpers;
+mod history;
 mod netcfg;
+mod satellite_ui;
+mod ui_helpers;
+
+use control_helpers::{
+    apply_pid_settings, is_loopback, loop_fault, pid_from_settings, sensor_is_stale, stable_first,
+    validate_pid_settings, LoopFault,
+};
+use history::PlotHistory;
+use satellite_ui::{SatSearchState, TrackedSat, OBJECT_TYPE_CHOICES, RCS_OPTIONS, SEARCH_PER_PAGE};
+use ui_helpers::{
+    dash_if_blank, error_color, fits_columns, output_fraction, port_selector, show_plot,
+    status_pill, LinkState,
+};
 
 use chrono::{Datelike, Timelike};
 use eframe::egui::{self, Color32};
@@ -7,19 +22,17 @@ use egui_plot::{Legend, Line, Plot, PlotPoint, PlotPoints, Points, Text};
 use igrf_core::geomagnetism::{
     Coordinate, GeomagnetismCalculator, GeomagnetismResult, UtcDateTime,
 };
-use igrf_core::satellite::{
-    elevation_deg, split_dateline_segments, SatellitePosition, SatelliteTracker, TleSet, PRESETS,
-};
+use igrf_core::satellite::{elevation_deg, split_dateline_segments, TleSet, PRESETS};
 use igrf_core::{
     contour_segments, field_from_magnitude, AppConfig, CalculationService, CalibrationSettings,
     ContourSegment, DisplayMode, FilterSettings, MapGrid, PidController, PidSettings,
-    ProcessedData, SatelliteEntry, SensorService, SetpointProfile, SlewLimiter,
-    FIRMWARE_MAX_OUTPUT, NOMINAL_TICK_SECONDS,
+    ProcessedData, SensorService, SetpointProfile, SlewLimiter, FIRMWARE_MAX_OUTPUT,
+    NOMINAL_TICK_SECONDS,
 };
 use igrf_io::{
     fetch_object_type, write_controller_packet, ControllerReplyCounter, Credentials, CsvLogger,
-    MagsonSample, MagsonTcpClient, SerialPortManager, SetpointServer, StoredTle, TleFilter,
-    TleStore, DEFAULT_BIND_ADDRESS,
+    MagsonSample, MagsonTcpClient, SerialPortManager, SetpointServer, StoredTle, TleStore,
+    DEFAULT_BIND_ADDRESS,
 };
 use std::sync::mpsc::{self, Receiver};
 use std::thread;
@@ -34,27 +47,12 @@ const TLE_STORE_PATH: &str = "tle_data.db";
 /// Appending keeps every existing analysis script working.
 const LOG_HEADER: &str = "Timestamp,MagX,MagY,MagZ,MagTotal,SetX,SetY,SetZ,SetTotal,ErrX,ErrY,ErrZ,OutX,OutY,OutZ,KpX,KiX,KdX,KpY,KiY,KdY,KpZ,KiZ,KdZ,Mag2X,Mag2Y,Mag2Z,Mag2Total,CmdX,CmdY,CmdZ,TickMs";
 const HANDSHAKE: [u8; 6] = [0x2A, 0x30, 0x30, 0x57, 0x45, 0x0D];
-const HISTORY_LIMIT: usize = 500;
 const CONTOUR_LINE_COLOR: Color32 = Color32::WHITE;
 /// Fixed contour step in nT, matching the C# app's hardcoded
 /// `ContourLevelStep = 2000` - no UI input for this.
 const CONTOUR_LEVEL_STEP_NT: f64 = 2000.0;
 const PID_INTERVAL: Duration = Duration::from_millis(100);
 const UI_INTERVAL: Duration = Duration::from_millis(50);
-/// A running loop is stopped once the newest sensor packet is older than this.
-const SENSOR_TIMEOUT: Duration = Duration::from_millis(1000);
-/// How long every raw count may sit unchanged before the sensor counts as dead.
-///
-/// The staleness watchdog only sees missing packets. A sensor that keeps
-/// sending the same reading is worse: the loop believes it, the error stays
-/// constant, the integrator winds to its clamp and the coils drive hard while
-/// the real field walks away unmeasured.
-///
-/// Well above SENSOR_TIMEOUT because this is a claim about physics rather than
-/// about the link. One HMR2300 count is 6.667 nT and its noise floor is larger
-/// than that, so all three axes holding identical counts for seconds is a
-/// frozen sensor, not a quiet cage.
-const SENSOR_FROZEN_TIMEOUT: Duration = Duration::from_secs(5);
 /// The C# build reopened the port after this long without a packet, so an
 /// unattended run survives a USB hiccup. The watchdog above only stops the
 /// coils; it never brings the link back.
@@ -74,8 +72,6 @@ const SOFT_IRON_ASYMMETRY_LIMIT: f64 = 1e-3;
 /// deliberately trimmed axis without passing over a missing digit.
 const AUTHORITY_RATIO_LIMIT: f64 = 1.5;
 const STOP_RED: Color32 = Color32::from_rgb(170, 45, 45);
-/// Below this the side-by-side X/Y/Z layout stacks vertically instead.
-const MIN_COLUMN_WIDTH: f32 = 190.0;
 /// Points per satellite ground track / field-vs-time curve, spread across
 /// one full orbital period. Fine enough to trace the antimeridian crossing
 /// without dominating a once-a-second recompute.
@@ -149,53 +145,6 @@ fn main() -> eframe::Result {
     )
 }
 
-#[derive(Default)]
-struct History {
-    points: Vec<[f64; 2]>,
-}
-
-impl History {
-    fn push(&mut self, x: f64, y: f64) {
-        if !x.is_finite() || !y.is_finite() {
-            return;
-        }
-        self.points.push([x, y]);
-        if self.points.len() > HISTORY_LIMIT {
-            let extra = self.points.len() - HISTORY_LIMIT;
-            self.points.drain(..extra);
-        }
-    }
-
-    fn clear(&mut self) {
-        self.points.clear();
-    }
-}
-
-#[derive(Default)]
-struct PlotHistory {
-    sensor_setpoint: [History; 3],
-    sensor_measured: [History; 3],
-    sensor_magnitude_setpoint: History,
-    sensor_magnitude_measured: History,
-    magson: [History; 4],
-}
-
-impl PlotHistory {
-    fn clear(&mut self) {
-        for history in &mut self.sensor_setpoint {
-            history.clear();
-        }
-        for history in &mut self.sensor_measured {
-            history.clear();
-        }
-        self.sensor_magnitude_setpoint.clear();
-        self.sensor_magnitude_measured.clear();
-        for history in &mut self.magson {
-            history.clear();
-        }
-    }
-}
-
 /// Where the commanded field comes from. Only one is live at a time, so a
 /// profile cannot fight a socket for the coils.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -234,162 +183,6 @@ impl AppTab {
             Self::Model => "IGRF Model",
             Self::Settings => "Settings",
         }
-    }
-}
-
-/// One entry in the "Satellite Position" list: the TLE text plus everything
-/// derived from it each tick. The tracker isn't serializable, so it's
-/// rebuilt from `name`/`line1`/`line2` on add and on config load rather than
-/// persisted itself - see [`igrf_core::SatelliteEntry`].
-struct TrackedSat {
-    name: String,
-    line1: String,
-    line2: String,
-    tracker: Option<SatelliteTracker>,
-    position: Option<SatellitePosition>,
-    field: Option<GeomagnetismResult>,
-    /// Ground track for the current simulated time, one full orbital period
-    /// centered on it. `[longitude, latitude]` pairs, already split at the
-    /// antimeridian - see [`split_dateline_segments`].
-    track_segments: Vec<Vec<[f64; 2]>>,
-    /// Total field intensity across the same track, as
-    /// `[minutes_from_now, nT]` pairs for the field-vs-time plot.
-    field_track: Vec<[f64; 2]>,
-    /// Elevation above the ground station's horizon last tick, so an AOS/LOS
-    /// status message fires on the transition instead of every tick.
-    was_visible: bool,
-    error: Option<String>,
-}
-
-impl TrackedSat {
-    fn new(name: String, line1: String, line2: String) -> Self {
-        let label = if name.trim().is_empty() {
-            "Satellite".to_owned()
-        } else {
-            name.clone()
-        };
-        let (tracker, error) = match SatelliteTracker::from_tle(Some(&label), &line1, &line2) {
-            Ok(tracker) => (Some(tracker), None),
-            Err(error) => (None, Some(error.to_string())),
-        };
-        Self {
-            name: label,
-            line1,
-            line2,
-            tracker,
-            position: None,
-            field: None,
-            track_segments: Vec::new(),
-            field_track: Vec::new(),
-            was_visible: false,
-            error,
-        }
-    }
-
-    fn from_entry(entry: &SatelliteEntry) -> Self {
-        Self::new(entry.name.clone(), entry.line1.clone(), entry.line2.clone())
-    }
-
-    fn to_entry(&self) -> SatelliteEntry {
-        SatelliteEntry {
-            name: self.name.clone(),
-            line1: self.line1.clone(),
-            line2: self.line2.clone(),
-        }
-    }
-}
-
-/// RCS-size live-filter options; index 0 is "any", the rest map to the stored
-/// upper-case values.
-const RCS_OPTIONS: [&str; 4] = ["(any)", "Small", "Medium", "Large"];
-/// The catalog-search "header": the four fetchable GP object types. `.1` is the
-/// Space-Track `OBJECT_TYPE` value. There is no "any" - a type must be picked
-/// and fetched before the other filters apply (see `db.md`).
-const OBJECT_TYPE_CHOICES: [(&str, &str); 4] = [
-    ("Payload", "PAYLOAD"),
-    ("Rocket Body", "ROCKET BODY"),
-    ("Debris", "DEBRIS"),
-    ("Unknown", "UNKNOWN"),
-];
-const SEARCH_PER_PAGE: usize = 10;
-
-/// "Search catalog" state under the Satellite Position panel.
-#[derive(Default)]
-struct SatSearchState {
-    /// Index into [`OBJECT_TYPE_CHOICES`] - the header selection.
-    object_type: usize,
-
-    // Live filters over the fetched rows.
-    object_name: String,
-    norad_cat_id: String,
-    rcs_size: usize,
-    site: String,
-    country_code: String,
-    /// `yyyy-mm-dd`; keeps results launched *before* this.
-    launch_date: String,
-    /// `yyyy-mm-dd`; keeps results decayed *before* this.
-    decay_date: String,
-
-    /// The running "Fetch data" worker, if any: sends back the row count or an
-    /// error message.
-    fetch_task: Option<Receiver<Result<usize, String>>>,
-    /// GP object-type values that have at least one row stored (so the search
-    /// can apply). Refreshed at startup and after every fetch.
-    fetched_types: Vec<String>,
-
-    results: Vec<StoredTle>,
-    total: usize,
-    page: usize,
-    error: Option<String>,
-    last_filter_key: String,
-}
-
-impl SatSearchState {
-    /// The Space-Track `OBJECT_TYPE` value currently selected.
-    fn selected_type(&self) -> &'static str {
-        OBJECT_TYPE_CHOICES[self.object_type].1
-    }
-
-    fn is_selected_type_fetched(&self) -> bool {
-        self.fetched_types.iter().any(|t| t == self.selected_type())
-    }
-
-    /// The filter for the live search: always scoped to the selected object
-    /// type, plus whichever other fields are filled in.
-    fn build_filter(&self) -> TleFilter {
-        let text = |value: &str| {
-            let trimmed = value.trim();
-            (!trimmed.is_empty()).then(|| trimmed.to_owned())
-        };
-        TleFilter {
-            object_type: Some(self.selected_type().to_owned()),
-            object_name: text(&self.object_name),
-            norad_cat_id: text(&self.norad_cat_id),
-            rcs_size: (self.rcs_size > 0).then(|| RCS_OPTIONS[self.rcs_size].to_uppercase()),
-            site: text(&self.site),
-            country_code: text(&self.country_code),
-            launch_date_before: text(&self.launch_date),
-            decay_date_before: text(&self.decay_date),
-        }
-    }
-
-    /// Filter key for the search
-    fn filter_key(&self) -> String {
-        format!(
-            "{}|{}|{}|{}|{}|{}|{}|{}",
-            self.object_type,
-            self.object_name.trim(),
-            self.norad_cat_id.trim(),
-            self.rcs_size,
-            self.site.trim(),
-            self.country_code.trim(),
-            self.launch_date.trim(),
-            self.decay_date.trim(),
-        )
-    }
-
-    fn page_count(&self) -> usize {
-        self.total.div_ceil(SEARCH_PER_PAGE).max(1)
     }
 }
 
@@ -3798,35 +3591,6 @@ impl eframe::App for IgrfApp {
     }
 }
 
-#[derive(Clone, Copy)]
-enum LinkState {
-    Off,
-    Wait,
-    On,
-}
-
-impl LinkState {
-    fn from_open(open: bool) -> Self {
-        if open {
-            Self::On
-        } else {
-            Self::Off
-        }
-    }
-
-    fn color(self) -> Color32 {
-        match self {
-            Self::Off => Color32::from_gray(120),
-            Self::Wait => Color32::from_rgb(230, 170, 60),
-            Self::On => Color32::from_rgb(80, 200, 120),
-        }
-    }
-}
-
-fn fits_columns(ui: &egui::Ui, count: usize) -> bool {
-    ui.available_width() >= MIN_COLUMN_WIDTH * count as f32
-}
-
 /// The element set stored in `tle_data.db` for this catalog number, if "Update
 /// TLE Info" has fetched it before. Any problem - no database yet, unreadable,
 /// nothing stored - is flattened to `None` so a broken file never keeps the
@@ -3847,15 +3611,6 @@ fn catalog_of(line1: &str) -> Option<u64> {
     TleSet::new(line1.trim(), "").catalog_number().ok()
 }
 
-/// `"-"` for an empty catalog field, the value itself otherwise.
-fn dash_if_blank(value: &str) -> &str {
-    if value.trim().is_empty() {
-        "-"
-    } else {
-        value
-    }
-}
-
 /// Worker body for the catalog search's "Fetch data": log in to Space-Track,
 /// fetch every object of `gp_type` (`PAYLOAD` / `ROCKET BODY` / ...), and upsert
 /// them into `tle_data.db`. Returns the row count; failures are flattened to a
@@ -3864,186 +3619,4 @@ fn run_type_fetch(gp_type: &str) -> Result<usize, String> {
     let credentials = Credentials::from_env().map_err(|error| error.to_string())?;
     let mut store = TleStore::open(TLE_STORE_PATH).map_err(|error| error.to_string())?;
     fetch_object_type(&credentials, &mut store, gp_type).map_err(|error| error.to_string())
-}
-
-/// An open port that stopped delivering packets leaves the last reading in
-/// place, and the PID would keep integrating against that frozen value until the
-/// output saturates. Never having received a packet counts as stale too.
-/// Whether a bind address keeps the setpoint listener on this machine.
-///
-/// Resolved rather than string-matched: `localhost` is loopback, `0.0.0.0` is
-/// not, and neither is obvious from the text. An address that will not resolve
-/// is reported as exposed, because the warning has to be the safe default.
-fn is_loopback(address: &str) -> bool {
-    use std::net::ToSocketAddrs;
-    (address, 0_u16)
-        .to_socket_addrs()
-        .map(|mut resolved| resolved.all(|socket| socket.ip().is_loopback()))
-        .unwrap_or(false)
-}
-
-/// Unlike [`sensor_is_stale`], `None` is not a fault: it only means no second
-/// packet has arrived yet, which staleness already covers.
-fn sensor_is_frozen(age: Option<Duration>) -> bool {
-    age.is_some_and(|age| age > SENSOR_FROZEN_TIMEOUT)
-}
-
-/// Why the loop must not be driving the coils, if it must not.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum LoopFault {
-    ControllerDown,
-    SensorFrozen,
-    SensorStale,
-}
-
-/// The one gate every path uses, so pausing and resuming cannot disagree about
-/// what counts as healthy.
-///
-/// Ordered by what the operator has to deal with first. A controller that is
-/// gone makes the sensor's state irrelevant - and is the worse fault, because
-/// the firmware has no receive timeout and holds its last command until the
-/// port reopens. A frozen sensor outranks a silent one only because it is the
-/// more specific diagnosis of the two.
-fn loop_fault(
-    controller_open: bool,
-    sensor_age: Option<Duration>,
-    sensor_change_age: Option<Duration>,
-) -> Option<LoopFault> {
-    if !controller_open {
-        return Some(LoopFault::ControllerDown);
-    }
-    if sensor_is_frozen(sensor_change_age) {
-        return Some(LoopFault::SensorFrozen);
-    }
-    if sensor_is_stale(sensor_age) {
-        return Some(LoopFault::SensorStale);
-    }
-    None
-}
-
-fn sensor_is_stale(age: Option<Duration>) -> bool {
-    age.is_none_or(|age| age > SENSOR_TIMEOUT)
-}
-
-fn status_pill(ui: &mut egui::Ui, label: &str, state: LinkState) {
-    let (rect, _) = ui.allocate_exact_size(egui::vec2(10.0, 10.0), egui::Sense::hover());
-    ui.painter()
-        .circle_filled(rect.center(), 4.0, state.color());
-    ui.colored_label(state.color(), label);
-}
-
-fn error_color(error_percent: f64) -> Color32 {
-    match error_percent.abs() {
-        value if !value.is_finite() => Color32::LIGHT_RED,
-        value if value < 1.0 => Color32::from_rgb(80, 200, 120),
-        value if value < 5.0 => Color32::from_rgb(230, 170, 60),
-        _ => Color32::LIGHT_RED,
-    }
-}
-
-/// Position of `output` inside `[min, max]`, clamped to 0..=1. Degenerate or
-/// non-finite ranges collapse to 0 so the bar never renders garbage.
-fn output_fraction(output: f64, min: f64, max: f64) -> f64 {
-    let span = max - min;
-    if !span.is_finite() || span <= 0.0 || !output.is_finite() {
-        return 0.0;
-    }
-    ((output - min) / span).clamp(0.0, 1.0)
-}
-
-fn pid_from_settings(settings: PidSettings) -> PidController {
-    let mut pid = PidController::default();
-    apply_pid_settings(&mut pid, &settings);
-    pid
-}
-
-fn apply_pid_settings(pid: &mut PidController, settings: &PidSettings) {
-    pid.kp = settings.kp;
-    pid.ki = settings.ki;
-    pid.kd = settings.kd;
-    pid.min_output = settings.min_output;
-    pid.max_output = settings.max_output;
-}
-
-fn validate_pid_settings(settings: &PidSettings) -> Result<(), &'static str> {
-    if ![
-        settings.kp,
-        settings.ki,
-        settings.kd,
-        settings.min_output,
-        settings.max_output,
-        settings.setpoint,
-    ]
-    .into_iter()
-    .all(f64::is_finite)
-    {
-        return Err("all values must be finite");
-    }
-    if settings.min_output >= settings.max_output {
-        return Err("minimum output must be less than maximum output");
-    }
-    Ok(())
-}
-
-/// Lists `/dev/serial/by-id/*` ahead of the kernel names. A suspend/resume
-/// re-enumerates USB, and `ttyUSB0` can come back as `ttyUSB1`; the by-id path
-/// carries the adapter's serial number, so a saved config still points at the
-/// same physical device.
-///
-/// A hub that drops or re-enumerates its device can leave the by-id symlink
-/// behind after the tty it points at is gone. Dangling entries are skipped so
-/// selecting one cannot fail on a dead path - the device, if it came back,
-/// reappears under its kernel name or a fresh by-id link.
-fn stable_first(ports: Vec<serialport::SerialPortInfo>) -> Vec<String> {
-    let mut names: Vec<String> = Vec::new();
-    if let Ok(entries) = std::fs::read_dir("/dev/serial/by-id") {
-        names.extend(
-            entries
-                .flatten()
-                .map(|entry| entry.path())
-                .filter(|path| std::fs::canonicalize(path).is_ok())
-                .map(|path| path.to_string_lossy().into_owned()),
-        );
-        names.sort();
-    }
-    names.extend(ports.into_iter().map(|port| port.port_name));
-    names
-}
-
-fn port_selector(ui: &mut egui::Ui, id: &str, selected: &mut String, ports: &[String]) {
-    let selected_text = if selected.trim().is_empty() {
-        "Select port"
-    } else {
-        selected.as_str()
-    };
-    egui::ComboBox::from_id_salt(id)
-        .selected_text(selected_text)
-        .show_ui(ui, |ui| {
-            for port in ports {
-                ui.selectable_value(selected, port.clone(), port);
-            }
-        });
-}
-
-fn show_plot(
-    ui: &mut egui::Ui,
-    id: &str,
-    title: &str,
-    series: &[(&str, &History, Color32)],
-    follow: bool,
-    height: f32,
-) {
-    ui.label(egui::RichText::new(title).small());
-    Plot::new(id)
-        .legend(Legend::default())
-        .height(height)
-        .show(ui, |plot_ui| {
-            if follow {
-                plot_ui.set_auto_bounds(true);
-            }
-            for (name, history, color) in series {
-                plot_ui
-                    .line(Line::new(*name, PlotPoints::new(history.points.clone())).color(*color));
-            }
-        });
 }
