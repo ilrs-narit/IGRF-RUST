@@ -30,10 +30,11 @@ use igrf_core::{
     NOMINAL_TICK_SECONDS,
 };
 use igrf_io::{
-    fetch_object_type, write_controller_packet, ControllerReplyCounter, Credentials, CsvLogger,
-    MagsonSample, MagsonTcpClient, SerialPortManager, SetpointServer, StoredTle, TleStore,
-    DEFAULT_BIND_ADDRESS,
+    fetch_object_type, list_drives, write_controller_packet, ControllerReplyCounter, Credentials,
+    CsvLogger, DriveInfo, MagsonSample, MagsonTcpClient, SerialPortManager, SetpointServer,
+    StoredTle, TleStore, DEFAULT_BIND_ADDRESS,
 };
+use std::path::{Path, PathBuf};
 use std::sync::mpsc::{self, Receiver};
 use std::thread;
 use std::time::{Duration, Instant, SystemTime};
@@ -195,6 +196,18 @@ struct IgrfApp {
     magson_ip: String,
     magson_port: u16,
     log_path: String,
+    log_files: Vec<FileRow>,
+    log_files_status: String,
+    log_files_scanned: bool,
+    log_files_sel: Option<String>,
+    ext_drives: Vec<DriveInfo>,
+    ext_drive_sel: usize,
+    ext_scanned: bool,
+    ext_cwd: Option<PathBuf>,
+    ext_entries: Vec<FileRow>,
+    ext_status: String,
+    ext_sel: Option<String>,
+    transfer_status: String,
     available_ports: Vec<String>,
     lan_profiles: Vec<netcfg::LanProfile>,
     lan_selected: usize,
@@ -342,6 +355,18 @@ impl IgrfApp {
             magson_ip: config.sensor2_ip.clone(),
             magson_port: config.sensor2_port as u16,
             log_path: "sensor_log.csv".to_owned(),
+            log_files: Vec::new(),
+            log_files_status: String::new(),
+            log_files_scanned: false,
+            log_files_sel: None,
+            ext_drives: Vec::new(),
+            ext_drive_sel: 0,
+            ext_scanned: false,
+            ext_cwd: None,
+            ext_entries: Vec::new(),
+            ext_status: String::new(),
+            ext_sel: None,
+            transfer_status: String::new(),
             available_ports,
             lan_profiles: netcfg::list_wired().unwrap_or_default(),
             lan_selected: 0,
@@ -2314,11 +2339,409 @@ impl IgrfApp {
         });
     }
 
-    /// How the window is presented. Mode and UI scale only take effect on the
-    /// next launch, since the window already exists by the time this panel is
-    /// drawn, so the panel says so rather than pretending a save will reflow
-    /// it. The monitor index is read fresh on every F11 press, so that one
-    /// applies as soon as it is changed.
+    // Get the logs directory
+    fn log_directory(&self) -> PathBuf {
+        match Path::new(self.log_path.trim()).parent() {
+            Some(parent) if !parent.as_os_str().is_empty() => parent.to_path_buf(),
+            _ => PathBuf::from("logs"),
+        }
+    }
+
+    /// Rescan the log directory for the "Saved log files" list. Read-only: a
+    /// missing directory is reported, not created.
+    fn refresh_log_files(&mut self) {
+        let dir = self.log_directory();
+        self.log_files.clear();
+        self.log_files_scanned = true;
+        match std::fs::read_dir(&dir) {
+            Ok(entries) => {
+                for entry in entries.flatten() {
+                    match entry.metadata() {
+                        Ok(meta) if meta.is_file() => self.log_files.push(FileRow {
+                            name: entry.file_name().to_string_lossy().into_owned(),
+                            is_dir: false,
+                            size_bytes: meta.len(),
+                        }),
+                        _ => {}
+                    }
+                }
+                // Sort files by name descending
+                self.log_files.sort_by(|a, b| b.name.cmp(&a.name));
+                self.log_files_status = format!("{} item(s)", self.log_files.len());
+                prune_selection(&mut self.log_files_sel, &self.log_files);
+            }
+            Err(error) => {
+                self.log_files_status = format!("Cannot read {}: {error}", dir.display());
+            }
+        }
+    }
+    // Show log files panel: left column is the logs folder, right column is the external drive
+    fn show_log_files_panel(&mut self, ui: &mut egui::Ui) {
+        if !self.log_files_scanned {
+            self.refresh_log_files();
+        }
+        if !self.ext_scanned {
+            self.refresh_drives();
+            self.ext_scanned = true;
+        }
+        let logs_path = self.log_directory().display().to_string();
+        let drive_path = self
+            .ext_cwd
+            .as_deref()
+            .map(|dir| dir.display().to_string())
+            .unwrap_or_else(|| "(no drive selected)".to_owned());
+
+        ui.horizontal_top(|ui| {
+            let gap = ui.spacing().item_spacing.x;
+            let mid = 54.0;
+            let side = ((ui.available_width() - mid - gap * 2.0) / 2.0).max(140.0);
+
+            ui.allocate_ui_with_layout(
+                egui::vec2(side, 0.0),
+                egui::Layout::top_down(egui::Align::Min),
+                |ui| {
+                    ui.set_width(side);
+                    ui.strong("Logs folder");
+                    ui.label(egui::RichText::new(&logs_path).monospace().small());
+                    self.show_logs_folder_list(ui);
+                },
+            );
+
+            // Middle strip, between the two lists
+            ui.allocate_ui_with_layout(
+                egui::vec2(mid, 0.0),
+                egui::Layout::top_down(egui::Align::Center),
+                |ui| {
+                    ui.set_width(mid);
+                    self.show_transfer_buttons(ui);
+                },
+            );
+
+            ui.allocate_ui_with_layout(
+                egui::vec2(side, 0.0),
+                egui::Layout::top_down(egui::Align::Min),
+                |ui| {
+                    ui.set_width(side);
+                    ui.strong("External drive");
+                    ui.label(egui::RichText::new(&drive_path).monospace().small());
+                    self.show_external_drive_panel(ui);
+                },
+            );
+        });
+
+        if !self.transfer_status.is_empty() {
+            ui.label(egui::RichText::new(&self.transfer_status).small().weak());
+        }
+    }
+
+    /// The copy buttons in the strip between the two lists: '>>' and '<<'
+    fn show_transfer_buttons(&mut self, ui: &mut egui::Ui) {
+        let to_logs_ready = self.ext_sel.is_some();
+        let to_drive_ready = self.log_files_sel.is_some() && self.ext_cwd.is_some();
+        let size = egui::vec2(40.0, 30.0);
+
+        ui.add_space(96.0);
+        if ui
+            .add_enabled(to_drive_ready, egui::Button::new(">>").min_size(size))
+            .on_hover_text("Copy the selected log file into the open drive folder")
+            .clicked()
+        {
+            self.copy_logs_to_drive();
+        }
+        ui.add_space(8.0);
+        if ui
+            .add_enabled(to_logs_ready, egui::Button::new("<<").min_size(size))
+            .on_hover_text("Copy the selected drive file into the logs folder")
+            .clicked()
+        {
+            self.copy_drive_to_logs();
+        }
+    }
+
+    fn copy_drive_to_logs(&mut self) {
+        let (Some(name), Some(cwd)) = (self.ext_sel.clone(), self.ext_cwd.clone()) else {
+            return;
+        };
+        let dest = self.log_directory();
+        self.copy_into(cwd.join(name), dest);
+    }
+
+    fn copy_logs_to_drive(&mut self) {
+        let (Some(name), Some(cwd)) = (self.log_files_sel.clone(), self.ext_cwd.clone()) else {
+            return;
+        };
+        let source = self.log_directory().join(name);
+        self.copy_into(source, cwd);
+    }
+
+    /// Copy `source` into `dest_dir`, keeping its file name. Overwrites a file of
+    /// the same name. Both lists are rescanned afterwards so the new file shows up.
+    fn copy_into(&mut self, source: PathBuf, dest_dir: PathBuf) {
+        let Some(name) = source.file_name().map(|name| name.to_owned()) else {
+            self.transfer_status = "No file selected".to_owned();
+            return;
+        };
+        if let Err(error) = std::fs::create_dir_all(&dest_dir) {
+            self.transfer_status = format!("Cannot open {}: {error}", dest_dir.display());
+            return;
+        }
+        let dest = dest_dir.join(&name);
+        let replaced = dest.exists();
+        match std::fs::copy(&source, &dest) {
+            Ok(bytes) => {
+                self.transfer_status = format!(
+                    "{} {} ({}) to {}",
+                    if replaced { "Replaced" } else { "Copied" },
+                    name.to_string_lossy(),
+                    human_size(bytes),
+                    dest_dir.display()
+                );
+            }
+            Err(error) => {
+                self.transfer_status = format!("Copy failed: {error}");
+            }
+        }
+        self.refresh_log_files();
+        self.refresh_ext_files();
+    }
+
+    /// Left column: ls every file in the log directory, with a Refresh to
+    /// rescan. Click a file to select it for a `>>` copy.
+    fn show_logs_folder_list(&mut self, ui: &mut egui::Ui) {
+        if ui.button("Refresh").clicked() {
+            self.refresh_log_files();
+        }
+        ui.label(egui::RichText::new(&self.log_files_status).small().weak());
+        if self.log_files.is_empty() {
+            return;
+        }
+        let mut pick: Option<String> = None;
+        egui::ScrollArea::vertical()
+            .id_salt("logs-folder-scroll")
+            .max_height(220.0)
+            .auto_shrink([false, true])
+            .show(ui, |ui| {
+                egui::Grid::new("saved-log-files")
+                    .striped(true)
+                    .num_columns(2)
+                    .show(ui, |ui| {
+                        for row in &self.log_files {
+                            let selected = self.log_files_sel.as_deref() == Some(row.name.as_str());
+                            if ui
+                                .selectable_label(
+                                    selected,
+                                    egui::RichText::new(&row.name).monospace(),
+                                )
+                                .clicked()
+                            {
+                                pick = Some(row.name.clone());
+                            }
+                            ui.label(
+                                egui::RichText::new(human_size(row.size_bytes))
+                                    .small()
+                                    .weak(),
+                            );
+                            ui.end_row();
+                        }
+                    });
+            });
+        if let Some(name) = pick {
+            self.log_files_sel =
+                (self.log_files_sel.as_deref() != Some(name.as_str())).then_some(name);
+        }
+    }
+
+    /// Right column: pick a connected drive from the dropdown
+    fn show_external_drive_panel(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            if ui
+                .button("Rescan")
+                .on_hover_text("Look for newly connected drives")
+                .clicked()
+            {
+                self.refresh_drives();
+            }
+            let selected_text = self
+                .ext_drives
+                .get(self.ext_drive_sel)
+                .map(|drive| drive.label.clone())
+                .unwrap_or_else(|| "(no drive)".to_owned());
+            let mut pick: Option<usize> = None;
+            egui::ComboBox::from_id_salt("ext-drive")
+                .selected_text(selected_text)
+                .show_ui(ui, |ui| {
+                    for (index, drive) in self.ext_drives.iter().enumerate() {
+                        if ui
+                            .selectable_label(index == self.ext_drive_sel, &drive.label)
+                            .clicked()
+                        {
+                            pick = Some(index);
+                        }
+                    }
+                });
+            if let Some(index) = pick {
+                self.select_ext_drive(index);
+            }
+        });
+
+        if self.ext_drives.is_empty() {
+            ui.label(
+                egui::RichText::new("No drives detected - plug one in and Rescan")
+                    .small()
+                    .weak(),
+            );
+            return;
+        }
+        if self.ext_cwd.is_none() {
+            ui.label(egui::RichText::new("Pick a drive above").small().weak());
+            return;
+        }
+
+        ui.horizontal(|ui| {
+            let at_root = self.ext_cwd.as_deref().and_then(Path::parent).is_none();
+            if ui
+                .add_enabled(!at_root, egui::Button::new("Back"))
+                .clicked()
+            {
+                if let Some(parent) = self.ext_cwd.as_deref().and_then(Path::parent) {
+                    self.navigate_ext(parent.to_path_buf());
+                }
+            }
+            if ui.button("Refresh").clicked() {
+                self.refresh_ext_files();
+            }
+        });
+        ui.label(egui::RichText::new(&self.ext_status).small().weak());
+
+        let mut into: Option<PathBuf> = None;
+        let mut pick: Option<String> = None;
+        egui::ScrollArea::vertical()
+            .id_salt("ext-drive-scroll")
+            .max_height(220.0)
+            .auto_shrink([false, true])
+            .show(ui, |ui| {
+                egui::Grid::new("ext-drive-files")
+                    .striped(true)
+                    .num_columns(2)
+                    .show(ui, |ui| {
+                        for row in &self.ext_entries {
+                            if row.is_dir {
+                                if ui
+                                    .selectable_label(false, format!("[dir]  {}", row.name))
+                                    .clicked()
+                                {
+                                    if let Some(cwd) = &self.ext_cwd {
+                                        into = Some(cwd.join(&row.name));
+                                    }
+                                }
+                                ui.label("");
+                            } else {
+                                let selected = self.ext_sel.as_deref() == Some(row.name.as_str());
+                                if ui
+                                    .selectable_label(
+                                        selected,
+                                        egui::RichText::new(&row.name).monospace(),
+                                    )
+                                    .clicked()
+                                {
+                                    pick = Some(row.name.clone());
+                                }
+                                ui.label(
+                                    egui::RichText::new(human_size(row.size_bytes))
+                                        .small()
+                                        .weak(),
+                                );
+                            }
+                            ui.end_row();
+                        }
+                    });
+            });
+        if let Some(path) = into {
+            self.navigate_ext(path);
+        } else if let Some(name) = pick {
+            self.ext_sel = (self.ext_sel.as_deref() != Some(name.as_str())).then_some(name);
+        }
+    }
+
+    /// Rebuild the connected-drive list for the dropdown, keeping the current
+    /// selection pointed at the same root when it is still present.
+    fn refresh_drives(&mut self) {
+        let previous = self
+            .ext_drives
+            .get(self.ext_drive_sel)
+            .map(|drive| drive.root.clone());
+        self.ext_drives = list_drives();
+        self.ext_drive_sel = previous
+            .and_then(|root| self.ext_drives.iter().position(|drive| drive.root == root))
+            .unwrap_or(0);
+        // Drop a browse position that belonged to a drive now unplugged.
+        if let Some(cwd) = self.ext_cwd.clone() {
+            if !self
+                .ext_drives
+                .iter()
+                .any(|drive| cwd.starts_with(&drive.root))
+            {
+                self.ext_cwd = None;
+                self.ext_entries.clear();
+                self.ext_status.clear();
+                self.ext_sel = None;
+            }
+        }
+    }
+
+    /// Point the browser at a drive's root and list it.
+    fn select_ext_drive(&mut self, index: usize) {
+        self.ext_drive_sel = index;
+        if let Some(drive) = self.ext_drives.get(index) {
+            self.ext_cwd = Some(PathBuf::from(&drive.root));
+            self.ext_sel = None;
+            self.refresh_ext_files();
+        }
+    }
+
+    /// Move the browser to `dir` and list it.
+    fn navigate_ext(&mut self, dir: PathBuf) {
+        self.ext_cwd = Some(dir);
+        self.ext_sel = None;
+        self.refresh_ext_files();
+    }
+
+    /// List the current external directory: folders first, then files by name.
+    fn refresh_ext_files(&mut self) {
+        self.ext_entries.clear();
+        let Some(dir) = self.ext_cwd.clone() else {
+            self.ext_status = "No drive selected".to_owned();
+            return;
+        };
+        match std::fs::read_dir(&dir) {
+            Ok(entries) => {
+                for entry in entries.flatten() {
+                    let Ok(meta) = entry.metadata() else { continue };
+                    let is_dir = meta.is_dir();
+                    if !is_dir && !meta.is_file() {
+                        continue;
+                    }
+                    self.ext_entries.push(FileRow {
+                        name: entry.file_name().to_string_lossy().into_owned(),
+                        is_dir,
+                        size_bytes: if is_dir { 0 } else { meta.len() },
+                    });
+                }
+                self.ext_entries.sort_by(|a, b| {
+                    b.is_dir
+                        .cmp(&a.is_dir)
+                        .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+                });
+                self.ext_status = format!("{} item(s)", self.ext_entries.len());
+                prune_selection(&mut self.ext_sel, &self.ext_entries);
+            }
+            Err(error) => {
+                self.ext_status = format!("Cannot read {}: {error}", dir.display());
+            }
+        }
+    }
+
+    /// Show display panel: window/fullscreen, UI scale, and which monitor to use for fullscreen.
     fn show_display_panel(&mut self, ui: &mut egui::Ui) {
         ui.label(egui::RichText::new("Window mode (applies on restart)").weak());
         ui.horizontal(|ui| {
@@ -3524,9 +3947,6 @@ impl eframe::App for IgrfApp {
                     self.show_top_bar(ui);
                     ui.add_space(2.0);
                 });
-                // No ScrollArea here: the Control tab sizes its plots and cage
-                // to whatever height is left, so it always fits on one screen
-                // (down to 1024x600). The narrow fallback keeps its own scroll.
                 egui::CentralPanel::default().show(ui, |ui| {
                     self.show_control_columns(ui);
                 });
@@ -3536,26 +3956,50 @@ impl eframe::App for IgrfApp {
                     egui::ScrollArea::vertical()
                         .auto_shrink([false; 2])
                         .show(ui, |ui| {
-                            ui.columns(2, |cols| {
-                                egui::CollapsingHeader::new("Connections")
-                                    .default_open(true)
-                                    .show(&mut cols[0], |ui| self.show_connection_panel(ui));
-                                egui::CollapsingHeader::new("LAN static IP")
-                                    .default_open(false)
-                                    .show(&mut cols[0], |ui| self.show_lan_panel(ui));
-                                egui::CollapsingHeader::new("Display")
-                                    .default_open(false)
-                                    .show(&mut cols[0], |ui| self.show_display_panel(ui));
+                            // The left column carries only short forms, so give
+                            // it less width than the right, which holds the
+                            // wider setpoint / calibration / logging panels.
+                            ui.horizontal_top(|ui| {
+                                let gap = ui.spacing().item_spacing.x;
+                                let total = ui.available_width();
+                                let left = ((total - gap) * 0.36).max(180.0);
+                                let right = (total - gap - left).max(220.0);
 
-                                egui::CollapsingHeader::new("Setpoint command")
-                                    .default_open(true)
-                                    .show(&mut cols[1], |ui| self.show_setpoint_panel(ui));
-                                egui::CollapsingHeader::new("Sensor calibration")
-                                    .default_open(false)
-                                    .show(&mut cols[1], |ui| self.show_calibration_panel(ui));
-                                egui::CollapsingHeader::new("Config / logging")
-                                    .default_open(true)
-                                    .show(&mut cols[1], |ui| self.show_config_panel(ui));
+                                ui.allocate_ui_with_layout(
+                                    egui::vec2(left, 0.0),
+                                    egui::Layout::top_down(egui::Align::Min),
+                                    |ui| {
+                                        ui.set_width(left);
+                                        egui::CollapsingHeader::new("Connections")
+                                            .default_open(true)
+                                            .show(ui, |ui| self.show_connection_panel(ui));
+                                        egui::CollapsingHeader::new("LAN static IP")
+                                            .default_open(false)
+                                            .show(ui, |ui| self.show_lan_panel(ui));
+                                        egui::CollapsingHeader::new("Display")
+                                            .default_open(false)
+                                            .show(ui, |ui| self.show_display_panel(ui));
+                                    },
+                                );
+                                ui.allocate_ui_with_layout(
+                                    egui::vec2(right, 0.0),
+                                    egui::Layout::top_down(egui::Align::Min),
+                                    |ui| {
+                                        ui.set_width(right);
+                                        egui::CollapsingHeader::new("Setpoint command")
+                                            .default_open(true)
+                                            .show(ui, |ui| self.show_setpoint_panel(ui));
+                                        egui::CollapsingHeader::new("Sensor calibration")
+                                            .default_open(false)
+                                            .show(ui, |ui| self.show_calibration_panel(ui));
+                                        egui::CollapsingHeader::new("Config / logging")
+                                            .default_open(true)
+                                            .show(ui, |ui| self.show_config_panel(ui));
+                                        egui::CollapsingHeader::new("Saved log files")
+                                            .default_open(false)
+                                            .show(ui, |ui| self.show_log_files_panel(ui));
+                                    },
+                                );
                             });
                         });
                 });
@@ -3591,6 +4035,38 @@ impl eframe::App for IgrfApp {
     }
 }
 
+/// One row in either file list of the Config / logging panel.
+struct FileRow {
+    name: String,
+    is_dir: bool,
+    size_bytes: u64,
+}
+
+/// Clear a remembered file selection once that file is no longer a plain file in
+/// the freshly scanned list (deleted, renamed, or navigated away from).
+fn prune_selection(selected: &mut Option<String>, rows: &[FileRow]) {
+    if let Some(name) = selected {
+        if !rows.iter().any(|row| !row.is_dir && &row.name == name) {
+            *selected = None;
+        }
+    }
+}
+
+/// Byte count as a short human string (`1.4 MB`), for the log file list.
+fn human_size(bytes: u64) -> String {
+    const UNITS: [&str; 4] = ["B", "KB", "MB", "GB"];
+    let mut value = bytes as f64;
+    let mut unit = 0;
+    while value >= 1024.0 && unit < UNITS.len() - 1 {
+        value /= 1024.0;
+        unit += 1;
+    }
+    if unit == 0 {
+        format!("{bytes} B")
+    } else {
+        format!("{value:.1} {}", UNITS[unit])
+    }
+}
 /// The element set stored in `tle_data.db` for this catalog number, if "Update
 /// TLE Info" has fetched it before. Any problem - no database yet, unreadable,
 /// nothing stored - is flattened to `None` so a broken file never keeps the
