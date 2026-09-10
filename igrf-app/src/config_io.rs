@@ -3,6 +3,14 @@ use crate::satellite_ui::TrackedSat;
 use crate::{IgrfApp, AXES, CONFIG_PATH};
 use igrf_core::{AppConfig, SlewLimiter, FIRMWARE_MAX_OUTPUT};
 
+/// Soft-iron terms above this far from their transpose are a config typo, not a
+/// calibration: an ellipsoid fit is symmetric by construction.
+const SOFT_IRON_ASYMMETRY_LIMIT: f64 = 1e-3;
+/// Output limits more lopsided than this are reported. A coil pair drives the
+/// same both ways, so the expected ratio is 1.0; 1.5 leaves room for a
+/// deliberately trimmed axis without passing over a missing digit.
+const AUTHORITY_RATIO_LIMIT: f64 = 1.5;
+
 impl IgrfApp {
     pub(crate) fn save_config(&mut self) {
         if self.sensor_baud == 0 {
@@ -129,5 +137,41 @@ impl IgrfApp {
                 None => self.set_status(format!("Loaded {CONFIG_PATH}")),
             },
         }
+    }
+
+    /// Flags a soft-iron matrix that is not symmetric. An ellipsoid fit always
+    /// produces one, so an outlier is a mistyped digit rather than a real
+    /// calibration - and the error only shows up once the cage is driving a
+    /// field, as cross-axis leak that reads like poor uniformity.
+    pub(crate) fn calibration_warning(&self) -> Option<String> {
+        let asymmetry = self.calibration.asymmetry();
+        (asymmetry > SOFT_IRON_ASYMMETRY_LIMIT).then(|| {
+            format!(
+                "soft-iron is asymmetric by {asymmetry:.4}; at 50000 nT on one axis that leaks \
+                 {:.0} nT into another. Check the SoftIron matrix in {CONFIG_PATH}.",
+                asymmetry * 50_000.0
+            )
+        })
+    }
+
+    /// Flags an axis that can push the field much harder one way than the
+    /// other. The hardware cannot do that - a Helmholtz pair is symmetric - so
+    /// the limits are describing the config, not the cage, and the loop will
+    /// saturate on one side long before the other.
+    pub(crate) fn authority_warning(&self) -> Option<String> {
+        let (axis, settings) = self.pid_settings.iter().enumerate().max_by(|left, right| {
+            left.1
+                .authority_ratio()
+                .total_cmp(&right.1.authority_ratio())
+        })?;
+        let ratio = settings.authority_ratio();
+        (ratio > AUTHORITY_RATIO_LIMIT).then(|| {
+            format!(
+                "PID {} drives {ratio:.1}x harder positive than negative ({:.0} against \
+                 {:.0}). A coil pair is symmetric; check MaxOutput and MinOutput in \
+                 {CONFIG_PATH}.",
+                AXES[axis], settings.max_output, settings.min_output
+            )
+        })
     }
 }
