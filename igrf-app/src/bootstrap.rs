@@ -103,6 +103,7 @@ impl IgrfApp {
             // Start from what the config asked for, so the F11 toggle and the
             // `Display.Mode` setting agree on the first press.
             fullscreen: config.display.mode == DisplayMode::Fullscreen,
+            osk: crate::osk::OnScreenKeyboard::new(),
             cage: cage::CageView::default(),
             started_at: Instant::now(),
             last_pid_tick: Instant::now(),

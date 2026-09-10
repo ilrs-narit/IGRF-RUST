@@ -56,6 +56,7 @@ impl eframe::App for IgrfApp {
         self.poll_io();
         self.run_pid();
         self.tick_satellite_tracking();
+        self.osk.set_visible(ctx.text_edit_focused());
         if ctx.input(|input| input.key_pressed(egui::Key::F11)) {
             self.fullscreen = !self.fullscreen;
             if self.fullscreen {

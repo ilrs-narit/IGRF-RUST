@@ -9,6 +9,7 @@ mod history;
 mod io_poll;
 mod logging;
 mod netcfg;
+mod osk;
 mod satellite_tracking;
 mod satellite_ui;
 mod setpoint;
@@ -223,6 +224,8 @@ struct IgrfApp {
     history: PlotHistory,
     follow_plots: bool,
     fullscreen: bool,
+    /// X11 on-screen keyboard shown while a text field has focus (touch panel).
+    osk: osk::OnScreenKeyboard,
     cage: cage::CageView,
     started_at: Instant,
     last_pid_tick: Instant,
