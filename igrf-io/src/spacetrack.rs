@@ -408,7 +408,11 @@ impl SpaceTrackClient {
         let status = response.status().as_u16();
         // A successful login returns an empty body; a rejected one returns 401
         // (or 200 with `{"Login":"Failed"}` on some deployments).
-        let body = response.body_mut().read_to_string().unwrap_or_default();
+        // Swallowing a read error here would make a login that the server
+        // rejected mid-response look successful (empty body), so surface it.
+        let body = response.body_mut().read_to_string().map_err(|error| {
+            SpaceTrackError::Api(format!("failed to read login response: {error}"))
+        })?;
         if status == 401 || status == 403 || (body.contains("\"Login\"") && body.contains("Failed"))
         {
             return Err(SpaceTrackError::Auth(

@@ -455,3 +455,79 @@ impl Wmm2025 {
         UtcDateTime::date(Self::VALID_TO_YEAR, 1, 1).expect("valid WMM date")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn julian_day_matches_known_epoch() {
+        assert!((UtcDateTime::date(2000, 1, 1).unwrap().julian_day() - 2_451_544.5).abs() < 1e-6);
+    }
+
+    #[test]
+    fn gmst_is_normalized_to_a_full_turn() {
+        let gmst = UtcDateTime::date(2025, 3, 1).unwrap().gmst_radians();
+        assert!((0.0..std::f64::consts::TAU).contains(&gmst));
+    }
+
+    #[test]
+    fn coordinate_rejects_out_of_range_and_non_finite() {
+        assert!(matches!(
+            Coordinate::new(91.0, 0.0),
+            Err(CoordinateError::LatitudeOutOfRange)
+        ));
+        assert!(matches!(
+            Coordinate::new(0.0, 181.0),
+            Err(CoordinateError::LongitudeOutOfRange)
+        ));
+        assert!(matches!(
+            Coordinate::new(f64::NAN, 0.0),
+            Err(CoordinateError::NonFiniteLatitude)
+        ));
+    }
+
+    #[test]
+    fn coordinate_z_rejects_non_finite_elevation() {
+        assert!(matches!(
+            CoordinateZ::new(0.0, 0.0, f64::INFINITY),
+            Err(CoordinateError::NonFiniteElevation)
+        ));
+    }
+
+    #[test]
+    fn utc_date_rejects_invalid_calendar_and_time() {
+        assert!(matches!(
+            UtcDateTime::date(2025, 2, 30),
+            Err(DateError::InvalidDate)
+        ));
+        assert!(matches!(
+            UtcDateTime::new(2025, 1, 1, 24, 0, 0, 0),
+            Err(DateError::InvalidTime)
+        ));
+        assert!(UtcDateTime::date(2024, 2, 29).is_ok());
+    }
+
+    #[test]
+    fn calculate_outside_wmm_window_is_none() {
+        let calc = GeomagnetismCalculator::new();
+        let date = UtcDateTime::date(2100, 1, 1).unwrap();
+        let result = calc
+            .try_calculate_at_altitude(Coordinate::new(18.0, 102.0).unwrap(), 0.0, date)
+            .unwrap();
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn calculate_in_window_is_finite_and_earth_like() {
+        let calc = GeomagnetismCalculator::new();
+        let date = UtcDateTime::date(2025, 6, 1).unwrap();
+        let result = calc
+            .try_calculate_at_altitude(Coordinate::new(18.0, 102.0).unwrap(), 0.0, date)
+            .unwrap()
+            .expect("2025-06-01 is inside the WMM window");
+        assert!(result.x.is_finite() && result.y.is_finite() && result.z.is_finite());
+        assert!(result.total_intensity > 0.0);
+        assert!((20_000.0..=70_000.0).contains(&result.total_intensity));
+    }
+}

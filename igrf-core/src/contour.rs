@@ -79,6 +79,12 @@ fn push_cell_segments(
     let v11 = grid.data[col + 1][row + 1];
     let v01 = grid.data[col][row + 1];
 
+    // A cell with any non-finite corner (NaN/Inf from a missing or bad grid
+    // cell) must not emit a segment, or NaN leaks into the coordinates.
+    if !v00.is_finite() || !v10.is_finite() || !v11.is_finite() || !v01.is_finite() {
+        return;
+    }
+
     let lerp = |a: f64, b: f64, va: f64, vb: f64| -> f64 {
         if (vb - va).abs() < f64::EPSILON {
             0.5 * (a + b)

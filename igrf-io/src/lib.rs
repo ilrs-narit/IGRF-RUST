@@ -1,5 +1,6 @@
 mod controller;
 mod csv_logger;
+mod drives;
 mod magson;
 mod serial;
 mod setpoint_server;
@@ -8,6 +9,7 @@ mod tle_store;
 
 pub use controller::{write_controller_packet, ControllerReplyCounter, CONTROLLER_ERROR_REPLY};
 pub use csv_logger::CsvLogger;
+pub use drives::{list_drives, DriveInfo};
 pub use magson::{
     parse_magson_frame, MagsonFrameParser, MagsonSample, MagsonTcpClient, MAGSON_FRAME_SIZE,
 };
