@@ -1,6 +1,7 @@
 mod cage;
 mod config_io;
 mod control_helpers;
+mod geomag;
 mod history;
 mod logging;
 mod netcfg;
@@ -26,10 +27,9 @@ use igrf_core::geomagnetism::{
 };
 use igrf_core::satellite::{elevation_deg, split_dateline_segments, TleSet, PRESETS};
 use igrf_core::{
-    contour_segments, field_from_magnitude, AppConfig, CalculationService, CalibrationSettings,
-    ContourSegment, DisplayMode, FilterSettings, MapGrid, PidController, PidSettings,
-    ProcessedData, SensorService, SetpointProfile, SlewLimiter, FIRMWARE_MAX_OUTPUT,
-    NOMINAL_TICK_SECONDS,
+    field_from_magnitude, AppConfig, CalculationService, CalibrationSettings, ContourSegment,
+    DisplayMode, FilterSettings, MapGrid, PidController, PidSettings, ProcessedData, SensorService,
+    SetpointProfile, SlewLimiter, FIRMWARE_MAX_OUTPUT, NOMINAL_TICK_SECONDS,
 };
 use igrf_io::{
     fetch_object_type, list_drives, write_controller_packet, ControllerReplyCounter, Credentials,
@@ -45,9 +45,6 @@ const CONFIG_PATH: &str = "SystemConfig.json";
 const TLE_STORE_PATH: &str = "tle_data.db";
 const HANDSHAKE: [u8; 6] = [0x2A, 0x30, 0x30, 0x57, 0x45, 0x0D];
 const CONTOUR_LINE_COLOR: Color32 = Color32::WHITE;
-/// Fixed contour step in nT, matching the C# app's hardcoded
-/// `ContourLevelStep = 2000` - no UI input for this.
-const CONTOUR_LEVEL_STEP_NT: f64 = 2000.0;
 const PID_INTERVAL: Duration = Duration::from_millis(100);
 const UI_INTERVAL: Duration = Duration::from_millis(50);
 /// The C# build reopened the port after this long without a packet, so an
@@ -1347,79 +1344,6 @@ impl IgrfApp {
         if self.error.is_none() {
             self.set_status("Master reset complete");
         }
-    }
-
-    /// Calculate Magnetism
-    fn calculate_manual_wmm(&mut self) {
-        let result = (|| {
-            let latitude = self.manual_lat;
-            let longitude = self.manual_lon;
-            let coordinate =
-                Coordinate::new(latitude, longitude).map_err(|error| error.to_string())?;
-            let now = chrono::Utc::now();
-            let date = UtcDateTime::new(
-                now.year(),
-                now.month() as u8,
-                now.day() as u8,
-                now.hour() as u8,
-                now.minute() as u8,
-                now.second() as u8,
-                now.timestamp_subsec_millis() as u16,
-            )
-            .map_err(|error| error.to_string())?;
-            GeomagnetismCalculator::new()
-                .try_calculate_at_altitude(coordinate, 0.0, date)
-                .map_err(|error| error.to_string())?
-                .ok_or_else(|| "date is outside WMM2025 validity (2025-2030)".to_owned())
-        })();
-        match result {
-            Ok(value) => {
-                self.manual_result = Some(value);
-                self.manual_error = None;
-                self.set_status("Manual WMM2025 calculation complete");
-            }
-            Err(error) => {
-                self.manual_result = None;
-                self.manual_error = Some(error);
-            }
-        }
-    }
-
-    /// Load Model
-    fn browse_map_grid(&mut self) {
-        let picked = rfd::FileDialog::new()
-            .set_title("Select Geomagnetic Grid Data")
-            .add_filter("Text files", &["txt"])
-            .add_filter("All files", &["*"])
-            .pick_file();
-        let Some(path) = picked else {
-            return;
-        };
-        self.map_grid_path = path.display().to_string();
-        match MapGrid::load(&path) {
-            Ok(grid) => {
-                self.map_grid = Some(grid);
-                self.map_grid_error = None;
-                self.regenerate_contours();
-                self.set_status("Geomagnetic grid map loaded");
-            }
-            Err(error) => {
-                self.map_grid = None;
-                self.map_contours = None;
-                self.map_grid_error = Some(error.to_string());
-            }
-        }
-    }
-
-    /// Generate Model
-    fn regenerate_contours(&mut self) {
-        let Some(grid) = &self.map_grid else {
-            self.map_grid_error = Some("load a grid file first".to_owned());
-            return;
-        };
-        self.map_contours = Some(contour_segments(grid, CONTOUR_LEVEL_STEP_NT));
-        self.map_view_generation += 1;
-        self.map_grid_error = None;
     }
 
     /// Parses the draft TLE fields and appends a new tracked satellite,
