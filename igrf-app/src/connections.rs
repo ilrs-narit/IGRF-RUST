@@ -1,3 +1,4 @@
+use crate::control_helpers::stable_first;
 use crate::IgrfApp;
 use igrf_io::write_controller_packet;
 use std::time::{Duration, Instant};
@@ -196,6 +197,19 @@ impl IgrfApp {
         self.set_status(format!("Controller reconnected: {port}; outputs zeroed"));
         if self.resume_after_reconnect {
             self.resume_pending = true;
+        }
+    }
+
+    pub(crate) fn refresh_ports(&mut self) {
+        match serialport::available_ports() {
+            Ok(ports) => {
+                self.available_ports = stable_first(ports);
+                self.set_status(format!(
+                    "Found {} serial port(s)",
+                    self.available_ports.len()
+                ));
+            }
+            Err(error) => self.set_error(format!("Cannot list serial ports: {error}")),
         }
     }
 }
