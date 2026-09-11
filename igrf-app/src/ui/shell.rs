@@ -1,89 +1,148 @@
 use super::*;
 
-impl IgrfApp {
-    /// Top-level page navigation
-    pub(crate) fn show_tab_strip(&mut self, ui: &mut egui::Ui) {
-        ui.add_space(4.0);
-        ui.horizontal(|ui| {
-            for tab in [AppTab::Control, AppTab::Model, AppTab::Settings] {
-                let selected = self.active_tab == tab;
-                let button =
-                    egui::Button::new(egui::RichText::new(tab.label()).strong().size(15.0))
-                        .selected(selected)
-                        .min_size(egui::vec2(120.0, 28.0));
-                if ui.add(button).clicked() {
-                    self.active_tab = tab;
-                }
-            }
-        });
-        ui.add_space(2.0);
-        ui.separator();
-    }
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum ShellAction {
+    Stop,
+    Reset,
+    Exit,
+}
 
-    pub(crate) fn show_top_bar(&mut self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            ui.heading("IGRF control");
-            ui.separator();
-            let sensor_age = self.sensor_age();
-            status_pill(
-                ui,
-                "Sensor",
-                if !self.sensor_manager.is_open() {
-                    LinkState::Off
-                } else if self.sensor_manager.parser().is_sensor_ready()
-                    && !sensor_is_stale(sensor_age)
-                {
-                    LinkState::On
+fn navigation(ui: &mut egui::Ui, active: &mut AppTab) -> Option<ShellAction> {
+    let mut action = None;
+    ui.add_space(4.0);
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 8.0;
+        let tab_width = ((ui.available_width() - 388.0) / 3.0).clamp(100.0, 172.0);
+        for tab in [AppTab::Control, AppTab::Model, AppTab::Settings] {
+            let selected = *active == tab;
+            let text = egui::RichText::new(tab.label())
+                .strong()
+                .size(15.0)
+                .color(if selected {
+                    Color32::from_rgb(8, 26, 32)
                 } else {
-                    LinkState::Wait
-                },
-            );
-            if self.sensor_manager.is_open() {
-                ui.label(
-                    egui::RichText::new(match sensor_age {
-                        Some(age) => format!("{:.1}s", age.as_secs_f64()),
-                        None => "no data".to_owned(),
-                    })
-                    .small()
-                    .weak(),
-                );
+                    Color32::from_rgb(168, 184, 201)
+                });
+            let button = egui::Button::new(text).selected(selected);
+            let response = ui.add_sized([tab_width, 48.0], button);
+            if response.clicked() {
+                *active = tab;
             }
-            status_pill(
-                ui,
-                "Controller",
-                LinkState::from_open(self.controller_manager.is_open()),
-            );
-            status_pill(
-                ui,
-                "Magson",
-                LinkState::from_open(self.magson_client.is_open()),
-            );
-            status_pill(ui, "CSV", LinkState::from_open(self.logger.is_some()));
-            ui.separator();
-            let running = self.pid_running.iter().filter(|state| **state).count();
-            ui.label(format!("PID {running}/3 running"));
-
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                let stop = egui::Button::new(
-                    egui::RichText::new("STOP ALL")
-                        .strong()
-                        .color(Color32::WHITE),
+        }
+        ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+            if ui
+                .add_sized(
+                    [152.0, 56.0],
+                    egui::Button::new(
+                        egui::RichText::new("STOP ALL")
+                            .strong()
+                            .size(16.0)
+                            .color(Color32::WHITE),
+                    )
+                    .fill(STOP_RED),
                 )
-                .fill(STOP_RED)
-                .min_size(egui::vec2(110.0, 26.0));
-                if ui.add(stop).clicked() {
-                    self.stop_all();
-                }
-                if ui.button("Master reset").clicked() {
-                    self.master_reset();
-                }
-                // In borderless fullscreen there is no title-bar close button,
-                // so the app has to offer its own exit. Closing runs `Drop`,
-                // which zeroes the coils before the process goes away.
-                if ui.button("Exit").clicked() {
-                    ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close);
-                }
-            });
+                .clicked()
+            {
+                action = Some(ShellAction::Stop);
+            }
+            ui.add_space(8.0);
+            ui.separator();
+            if ui
+                .add_sized([112.0, 48.0], egui::Button::new("Master reset"))
+                .clicked()
+            {
+                action = Some(ShellAction::Reset);
+            }
+            if ui
+                .add_sized([60.0, 48.0], egui::Button::new("Exit"))
+                .clicked()
+            {
+                action = Some(ShellAction::Exit);
+            }
         });
+    });
+    ui.add_space(4.0);
+    action
+}
+
+impl IgrfApp {
+    pub(crate) fn show_tab_strip(&mut self, ui: &mut egui::Ui) {
+        match navigation(ui, &mut self.active_tab) {
+            Some(ShellAction::Stop) => self.stop_all(),
+            Some(ShellAction::Reset) => self.master_reset(),
+            Some(ShellAction::Exit) => ui.ctx().send_viewport_cmd(egui::ViewportCommand::Close),
+            None => {}
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn navigation_switches_tabs_and_stop_remains_reachable_below_inset() {
+        for inset in [0.0, 120.0] {
+            let ctx = egui::Context::default();
+            let mut active = AppTab::Control;
+            let mut frame = |events: Vec<egui::Event>| {
+                let mut action = None;
+                let mut output = ctx.run_ui(
+                    egui::RawInput {
+                        screen_rect: Some(egui::Rect::from_min_size(
+                            egui::Pos2::ZERO,
+                            egui::vec2(1024.0, 600.0),
+                        )),
+                        events,
+                        ..Default::default()
+                    },
+                    |ui| {
+                        if inset > 0.0 {
+                            egui::Panel::top("inset").exact_size(inset).show(ui, |_| {});
+                        }
+                        egui::Panel::top("nav").show(ui, |ui| {
+                            assert!(ui.cursor().top() >= inset);
+                            action = navigation(ui, &mut active);
+                            assert!(ui.min_rect().right() <= 1024.0);
+                        });
+                    },
+                );
+                output.textures_delta.clear();
+                (active, action)
+            };
+            frame(vec![]);
+            for (x, expected_tab, expected_action) in [
+                (260.0, AppTab::Model, None),
+                (440.0, AppTab::Settings, None),
+                (940.0, AppTab::Settings, Some(ShellAction::Stop)),
+                (80.0, AppTab::Control, None),
+                (940.0, AppTab::Control, Some(ShellAction::Stop)),
+            ] {
+                let pos = egui::pos2(x, inset + 30.0);
+                frame(vec![egui::Event::PointerMoved(pos)]);
+                frame(vec![
+                    egui::Event::PointerMoved(pos),
+                    egui::Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed: true,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ]);
+                let (tab, action) = frame(vec![egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed: false,
+                    modifiers: egui::Modifiers::NONE,
+                }]);
+                assert!(
+                    tab == expected_tab,
+                    "inset={inset} x={x} got={} expected={}",
+                    tab.label(),
+                    expected_tab.label()
+                );
+                assert_eq!(action, expected_action);
+            }
+        }
     }
 }
