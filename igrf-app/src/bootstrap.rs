@@ -17,6 +17,30 @@ impl IgrfApp {
         config: AppConfig,
         config_problem: Option<String>,
     ) -> Self {
+        let mut style = (*_cc.egui_ctx.style_of(eframe::egui::Theme::Dark)).clone();
+        style.visuals = eframe::egui::Visuals::dark();
+        let rgb = eframe::egui::Color32::from_rgb;
+        style.visuals.panel_fill = rgb(16, 21, 29);
+        style.visuals.window_fill = rgb(24, 33, 45);
+        style.visuals.extreme_bg_color = rgb(16, 21, 29);
+        style.visuals.faint_bg_color = rgb(24, 33, 45);
+        style.visuals.override_text_color = Some(rgb(237, 243, 250));
+        style.visuals.selection.bg_fill = rgb(83, 199, 232);
+        style.visuals.selection.stroke.color = rgb(8, 26, 32);
+        for widget in [
+            &mut style.visuals.widgets.noninteractive,
+            &mut style.visuals.widgets.inactive,
+            &mut style.visuals.widgets.hovered,
+            &mut style.visuals.widgets.active,
+        ] {
+            widget.bg_fill = rgb(34, 47, 62);
+            widget.weak_bg_fill = rgb(24, 33, 45);
+            widget.bg_stroke.color = rgb(52, 67, 85);
+            widget.corner_radius = eframe::egui::CornerRadius::same(6);
+        }
+        style.spacing.item_spacing = eframe::egui::vec2(8.0, 6.0);
+        _cc.egui_ctx.set_theme(eframe::egui::Theme::Dark);
+        _cc.egui_ctx.set_style_of(eframe::egui::Theme::Dark, style);
         let pid_settings = [
             config.pid_x.clone(),
             config.pid_y.clone(),
