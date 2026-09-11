@@ -139,7 +139,7 @@ impl eframe::App for IgrfApp {
                             ui.horizontal_top(|ui| {
                                 let gap = ui.spacing().item_spacing.x;
                                 let total = ui.available_width();
-                                let left = ((total - gap) * 0.36).max(180.0);
+                                let left = ((total - gap) * 0.26).max(100.0);
                                 let right = (total - gap - left).max(220.0);
 
                                 ui.allocate_ui_with_layout(

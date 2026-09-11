@@ -57,7 +57,7 @@ impl IgrfApp {
         ui.horizontal_top(|ui| {
             let gap = ui.spacing().item_spacing.x;
             let mid = 54.0;
-            let side = ((ui.available_width() - mid - gap * 2.0) / 2.0).max(140.0);
+            let side = ((ui.available_width() - mid - gap * 2.0) / 2.0).clamp(140.0, 190.0);
 
             ui.allocate_ui_with_layout(
                 egui::vec2(side, 0.0),
