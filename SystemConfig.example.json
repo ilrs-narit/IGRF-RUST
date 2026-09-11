@@ -73,6 +73,7 @@
   "Display": {
     "Mode": "Window",
     "UiScale": 1.0,
-    "FullscreenMonitor": 0
+    "FullscreenMonitor": 0,
+    "TopInset": 0.0
   }
 }

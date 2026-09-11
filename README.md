@@ -30,6 +30,7 @@ Windows dev machine already has.
 | `Mode` | `Window` (default) opens a normal desktop window; `Fullscreen` opens borderless fullscreen with no decorations, which is what an embedded 1024x600 touch panel. Applies on the next launch. |
 | `UiScale` | Global UI zoom factor. `1.0` is the desktop default; a value above `1.0` enlarges fonts, buttons and spacing for finger touch. `0.5` to `3.0`. Applies on the next launch. |
 | `FullscreenMonitor` | Which screen fullscreen lands on, `0` (default) being the first. On a one-screen kiosk leave it at `0`; change it only on a multi-monitor dev machine. Read at startup and on every F11 press. |
+| `TopInset` | Blank pixels reserved above the tab strip, `0.0` (default) on a desktop display. Raise it on a panel whose touch digitizer cannot sense the top edge: the dead band makes the tab strip and top-bar buttons unreachable, so this drops them below it. `0` to `400`. |
 
 There is a "Display" panel under the Settings tab to edit these without
 hand-editing the JSON. F11 toggles fullscreen at runtime.
