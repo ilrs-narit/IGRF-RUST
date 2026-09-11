@@ -80,7 +80,7 @@ impl eframe::App for IgrfApp {
         if top_inset > 0.0 {
             egui::Panel::top("readout")
                 .exact_size(top_inset)
-                .show(ui, |_| {});
+                .show(ui, |ui| self.show_readout(ui));
         }
         egui::Panel::top("tab-strip").show(ui, |ui| {
             self.show_tab_strip(ui);

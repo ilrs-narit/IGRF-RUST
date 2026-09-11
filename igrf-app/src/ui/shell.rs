@@ -74,6 +74,69 @@ impl IgrfApp {
             None => {}
         }
     }
+
+    /// Read-only telemetry for the touch-insensitive top band.
+    pub(crate) fn show_readout(&mut self, ui: &mut egui::Ui) {
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("B nT").strong().size(16.0));
+            for (label, value) in AXES.iter().zip(self.filtered) {
+                ui.label(
+                    egui::RichText::new(format!("{label} {value:+.1}"))
+                        .monospace()
+                        .size(22.0),
+                );
+            }
+            let magnitude = self
+                .filtered
+                .iter()
+                .map(|value| value * value)
+                .sum::<f64>()
+                .sqrt();
+            ui.label(
+                egui::RichText::new(format!("|B| {magnitude:+.1}"))
+                    .monospace()
+                    .size(22.0),
+            );
+        });
+        ui.horizontal(|ui| {
+            ui.label(egui::RichText::new("Set").strong());
+            for (label, settings) in AXES.iter().zip(&self.pid_settings) {
+                ui.label(format!("{label} {:+.1}", settings.setpoint));
+            }
+            ui.separator();
+            ui.label(egui::RichText::new("Out").strong());
+            for (label, output) in AXES.iter().zip(self.outputs) {
+                ui.label(format!("{label} {output:+.0}"));
+            }
+        });
+        ui.horizontal(|ui| {
+            let sensor_state = if !self.sensor_manager.is_open() {
+                LinkState::Off
+            } else if self.sensor_manager.parser().is_sensor_ready()
+                && !sensor_is_stale(self.sensor_age())
+            {
+                LinkState::On
+            } else {
+                LinkState::Wait
+            };
+            status_pill(ui, "Sensor", sensor_state);
+            status_pill(
+                ui,
+                "Controller",
+                LinkState::from_open(self.controller_manager.is_open()),
+            );
+            status_pill(
+                ui,
+                "Magson",
+                LinkState::from_open(self.magson_client.is_open()),
+            );
+            status_pill(ui, "CSV", LinkState::from_open(self.logger.is_some()));
+            ui.label(format!(
+                "PID {}/3",
+                self.pid_running.iter().filter(|running| **running).count()
+            ));
+        });
+    }
 }
 
 #[cfg(test)]
