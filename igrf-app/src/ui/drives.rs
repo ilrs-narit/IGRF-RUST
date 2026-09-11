@@ -65,6 +65,8 @@ impl IgrfApp {
                 .unwrap_or_else(|| "(no drive)".to_owned());
             let mut pick: Option<usize> = None;
             egui::ComboBox::from_id_salt("ext-drive")
+                .width(60.0)
+                .wrap_mode(egui::TextWrapMode::Truncate)
                 .selected_text(selected_text)
                 .show_ui(ui, |ui| {
                     for (index, drive) in self.ext_drives.iter().enumerate() {
