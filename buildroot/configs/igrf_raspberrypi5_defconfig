@@ -1,0 +1,108 @@
+# IGRF kiosk defconfig for Raspberry Pi 5 (Buildroot 2026.08)
+#
+# Base: the 2026.08 configs/raspberrypi5_defconfig, reproduced verbatim
+# except where this file says otherwise. Pinned Buildroot: release 2026.08,
+# commit d5180309b1b66ef3b8eaccca70ad69be8e0729a1 (Rust 1.97.1 via rust-bin).
+#
+# Changes from the upstream base:
+#   - systemd init instead of busybox init
+#   - read-only squashfs rootfs instead of a read-write ext2 rootfs
+#     (BR2_TARGET_ROOTFS_EXT2* removed; the root stays read-only, /var is a
+#     tmpfs populated from the systemd "factory")
+#   - rootfs overlay, extra patch dir and post-build/post-image hooks from
+#     this BR2_EXTERNAL tree, appended after the in-tree raspberrypi5 ones
+#   - packages for the kiosk: igrf-app, onboard, NetworkManager + Wi-Fi,
+#     X11/Mesa3D (V3D — Pi 5 GPU, not vc4), GTK3, matchbox, python3 +
+#     gobject-introspection, exFAT tools, host Rust compiler
+#
+# UNVERIFIED: this defconfig has not been through a real Buildroot build.
+# No cross-build has been run and no Raspberry Pi 5 has booted it; the
+# design doc (docs/buildroot-design.md) forbids claiming build results.
+# Every symbol below is traceable to the Buildroot 2026.08 tree, except
+# BR2_PACKAGE_IGRF_APP and BR2_PACKAGE_ONBOARD, which are defined by the
+# package Config.in files of their own tickets (#19, #20).
+#
+# USB storage note: BR2_PACKAGE_UDISKS2 is deliberately absent — udisks2
+# does not exist in Buildroot 2026.08 (only the legacy udisks 1.x,
+# BR2_PACKAGE_UDISKS). The USB mount/eject mechanism is ticket #23's
+# choice and is not pre-empted here.
+
+BR2_aarch64=y
+BR2_cortex_a76=y
+BR2_TOOLCHAIN_EXTERNAL=y
+BR2_TOOLCHAIN_EXTERNAL_BOOTLIN=y
+BR2_TOOLCHAIN_EXTERNAL_BOOTLIN_AARCH64_GLIBC_STABLE=y
+BR2_GLOBAL_PATCH_DIR="board/raspberrypi/patches $(BR2_EXTERNAL_IGRF_PATH)/board/igrf/raspberrypi5/patches"
+BR2_DOWNLOAD_FORCE_CHECK_HASHES=y
+BR2_SYSTEM_DHCP="eth0"
+BR2_ROOTFS_POST_BUILD_SCRIPT="board/raspberrypi5/post-build.sh $(BR2_EXTERNAL_IGRF_PATH)/board/igrf/raspberrypi5/post-build.sh"
+BR2_ROOTFS_POST_IMAGE_SCRIPT="board/raspberrypi5/post-image.sh $(BR2_EXTERNAL_IGRF_PATH)/board/igrf/raspberrypi5/post-image.sh"
+BR2_ROOTFS_OVERLAY="$(BR2_EXTERNAL_IGRF_PATH)/board/igrf/raspberrypi5/rootfs-overlay"
+BR2_LINUX_KERNEL=y
+BR2_LINUX_KERNEL_CUSTOM_TARBALL=y
+BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION="$(call github,raspberrypi,linux,21b410140c47ffab5668399f6f143c7d7b935c8b)/linux-21b410140c47ffab5668399f6f143c7d7b935c8b.tar.gz"
+BR2_LINUX_KERNEL_DEFCONFIG="bcm2712"
+BR2_LINUX_KERNEL_CONFIG_FRAGMENT_FILES="board/raspberrypi/linux-4k-page-size.fragment"
+BR2_LINUX_KERNEL_DTS_SUPPORT=y
+BR2_LINUX_KERNEL_INTREE_DTS_NAME="broadcom/bcm2712-rpi-5-b broadcom/bcm2712d0-rpi-5-b broadcom/bcm2712-rpi-500"
+BR2_LINUX_KERNEL_NEEDS_HOST_OPENSSL=y
+BR2_PACKAGE_BUSYBOX_SHOW_OTHERS=y
+BR2_PACKAGE_XZ=y
+BR2_PACKAGE_RPI_FIRMWARE=y
+BR2_PACKAGE_RPI_FIRMWARE_CONFIG_FILE="board/raspberrypi5/config_5.txt"
+BR2_PACKAGE_RPI_FIRMWARE_CMDLINE_FILE="board/raspberrypi5/cmdline_5.txt"
+# BR2_PACKAGE_RPI_FIRMWARE_INSTALL_DTB_OVERLAYS is not set
+BR2_PACKAGE_KMOD=y
+BR2_PACKAGE_KMOD_TOOLS=y
+
+# Init: systemd, root filesystem stays read-only, /var is a tmpfs
+# populated from the factory image by systemd-tmpfiles.
+BR2_INIT_SYSTEMD=y
+BR2_PACKAGE_SYSTEMD=y
+# BR2_TARGET_GENERIC_REMOUNT_ROOTFS_RW is not set
+BR2_INIT_SYSTEMD_VAR_FACTORY=y
+
+# Networking: NetworkManager (LAN + Wi-Fi, driven by nmcli from the app),
+# wpa_supplicant on nl80211, and the Raspberry Pi Wi-Fi firmware.
+BR2_PACKAGE_NETWORK_MANAGER=y
+BR2_PACKAGE_NETWORK_MANAGER_CLI=y
+BR2_PACKAGE_WPA_SUPPLICANT=y
+BR2_PACKAGE_WPA_SUPPLICANT_NL80211=y
+BR2_PACKAGE_IW=y
+BR2_PACKAGE_BRCMFMAC_SDIO_FIRMWARE_RPI=y
+BR2_PACKAGE_BRCMFMAC_SDIO_FIRMWARE_RPI_WIFI=y
+
+# Graphics: X11, Mesa3D with the V3D gallium driver (Pi 5 / VideoCore VII;
+# V3D selects the vc4 driver itself as its runtime), GTK3 on X11, and the
+# matchbox window manager.
+BR2_PACKAGE_XORG7=y
+BR2_PACKAGE_XSERVER_XORG_SERVER=y
+BR2_PACKAGE_MESA3D=y
+BR2_PACKAGE_MESA3D_OPENGL_EGL=y
+BR2_PACKAGE_MESA3D_GALLIUM_DRIVER_V3D=y
+BR2_PACKAGE_LIBGTK3=y
+BR2_PACKAGE_LIBGTK3_X11=y
+BR2_PACKAGE_MATCHBOX=y
+
+# Python/GTK stack for onboard (gobject-introspection pulls target
+# python3 under qemu at build time — see RESEARCH.md section 7).
+BR2_PACKAGE_PYTHON3=y
+BR2_PACKAGE_GOBJECT_INTROSPECTION=y
+BR2_PACKAGE_PYTHON_GOBJECT=y
+
+# exFAT userspace tools for USB import/export (in-kernel exFAT driver).
+BR2_PACKAGE_EXFATPROGS=y
+
+# The application and its on-screen keyboard, from this BR2_EXTERNAL
+# tree. igrf-app is a cargo package, which needs the host Rust compiler.
+BR2_PACKAGE_IGRF_APP=y
+BR2_PACKAGE_ONBOARD=y
+BR2_PACKAGE_HOST_RUSTC=y
+
+# Read-only root filesystem image.
+BR2_TARGET_ROOTFS_SQUASHFS=y
+# BR2_TARGET_ROOTFS_TAR is not set
+BR2_PACKAGE_HOST_DOSFSTOOLS=y
+BR2_PACKAGE_HOST_GENIMAGE=y
+BR2_PACKAGE_HOST_KMOD_XZ=y
+BR2_PACKAGE_HOST_MTOOLS=y
