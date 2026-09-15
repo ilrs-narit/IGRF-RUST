@@ -5,8 +5,9 @@
 ################################################################################
 
 # Prototype source mode: build straight from a local checkout of this
-# repository. The developer sets IGRF_APP_OVERRIDE_SRCDIR to the repository
-# root in local.mk (uncommitted, next to the Buildroot .config):
+# repository. The default is this checkout, since the external tree lives in
+# the repository's buildroot/ directory; to build a different one, set
+# IGRF_APP_OVERRIDE_SRCDIR in local.mk (uncommitted, next to the .config):
 #
 #   IGRF_APP_OVERRIDE_SRCDIR = /abs/path/to/IGRF-RUST
 #
@@ -14,10 +15,18 @@
 # checkout into the build dir, and skips the download step entirely. Local
 # mode therefore needs no .hash and this package deliberately ships none.
 #
+# The default is not a convenience. For a local site method pkg-generic.mk
+# assigns _SITE to _OVERRIDE_SRCDIR when the latter is empty, so leaving the
+# override unset on a _SITE that is itself _OVERRIDE_SRCDIR kills the build at
+# parse time with "Recursive variable ... references itself", naming a
+# variable the .mk never defines. The ?= keeps command-line and local.mk
+# overrides working.
+#
 # The version is overridden to "custom" by pkg-generic in this mode; the
 # value below is the igrf-app crate version for the release path.
 IGRF_APP_VERSION = 0.5.0
 IGRF_APP_SITE_METHOD = local
+IGRF_APP_OVERRIDE_SRCDIR ?= $(abspath $(BR2_EXTERNAL_IGRF_PATH)/..)
 IGRF_APP_SITE = $(IGRF_APP_OVERRIDE_SRCDIR)
 
 # Release path (NOT in use for the prototype): a pinned tarball plus a real

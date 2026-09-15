@@ -54,7 +54,9 @@ make -C buildroot-src O="$IGRF_REPO/buildroot/output" \
   BR2_EXTERNAL="$IGRF_REPO/buildroot" BR2_DL_DIR="$IGRF_REPO/buildroot/dl"
 ```
 
-Avoid spaces in the build/repository path (Buildroot restriction). Keep
+Avoid spaces in the build/repository path (Buildroot restriction). `local.mk`
+is optional — without it the app builds from this repository checkout — and
+only exists to point the build at a different one. Keep
 `buildroot/dl/` between builds; `output/` and `local.mk` are machine-local.
 The resulting image should be `buildroot/output/images/sdcard.img`. Failures
 in configuration, hash checks or compilation must be resolved before treating
