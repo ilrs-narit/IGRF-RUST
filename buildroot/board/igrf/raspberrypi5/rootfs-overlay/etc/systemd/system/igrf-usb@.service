@@ -1,0 +1,14 @@
+[Unit]
+Description=Mount IGRF USB media %I
+BindsTo=dev-%i.device
+After=dev-%i.device igrf-data-init.service
+Requires=igrf-data-init.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+RuntimeDirectory=media/igrf-%i
+RuntimeDirectoryMode=0700
+ExecStart=/usr/bin/python3 /usr/lib/igrf/usb-media.py mount %i
+# Ordinary unmount only. Never force/lazy-unmount files held by the app.
+ExecStop=-/usr/bin/umount /run/media/igrf-%i
