@@ -109,9 +109,25 @@ the resolved output `.config`, host package/container versions, build log and
 `sha256sum buildroot/output/images/*` alongside the image. Pinning means the
 same source/dependency versions, not guaranteed byte-identical images.
 
-Use Raspberry Pi Imager's custom-image option and select the intended microSD
-(32 GB or larger). Writing an image overwrites the card: first finish the
-[backup procedure](buildroot-log-policy.md), then verify the selected device.
+Write the image to a card of 32 GB or larger. Raspberry Pi Imager's
+custom-image option does this, and so does `dd`; either way the write destroys
+whatever is on the card, so finish the
+[backup procedure](buildroot-log-policy.md) first and identify the device
+against the card you mean to overwrite:
+
+```sh
+lsblk -o NAME,SIZE,MODEL,MOUNTPOINT     # note the card; unplug and repeat if unsure
+sudo dd if=buildroot/output/images/sdcard.img of=/dev/sdX bs=4M conv=fsync status=progress
+sync
+sudo partprobe /dev/sdX
+lsblk -o NAME,SIZE /dev/sdX             # expect 128M vfat plus two Linux partitions
+sudo cmp -n 1048576 buildroot/output/images/sdcard.img /dev/sdX && echo "write verified"
+```
+
+Confirming the first megabyte against the image catches a truncated or
+half-written card before it is trusted. The `panel model` recorded in P1 is the
+one thing here that cannot be recovered later.
+
 The data-grow service expands partition 3 on boot. Keep coil power disconnected
 through all initial image tests and recovery work.
 
