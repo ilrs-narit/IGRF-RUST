@@ -52,6 +52,7 @@ IGRF_APP_DEPENDENCIES = libgtk3
 # does not need this hook.
 define IGRF_APP_FETCH_CARGO_DEPS
 	cd $(IGRF_APP_SRCDIR) && \
+		$(HOST_MAKE_ENV) \
 		CARGO_HOME=$(BR_CARGO_HOME) \
 		cargo fetch --locked --target $(RUSTC_TARGET_NAME)
 endef
@@ -71,7 +72,7 @@ define IGRF_APP_INSTALL_INIT_SYSTEMD
 	$(INSTALL) -D -m 0644 $(IGRF_APP_PKGDIR)/igrf-app.service \
 		$(TARGET_DIR)/usr/lib/systemd/system/igrf-app.service
 	mkdir -p $(TARGET_DIR)/etc/systemd/system/multi-user.target.wants
-	ln -sf ../igrf-app.service \
+	ln -sf ../../../../usr/lib/systemd/system/igrf-app.service \
 		$(TARGET_DIR)/etc/systemd/system/multi-user.target.wants/igrf-app.service
 endef
 
