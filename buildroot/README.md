@@ -50,9 +50,10 @@ package/                          igrf-app, onboard and its missing deps
 
 ## Not verified
 
-This tree has **not been built or booted**. It is written against the
-Buildroot 2026.08 sources and the upstream package metadata, but no cross-build
-has been run and there is no Raspberry Pi 5 available. Do not treat any part of
-it as proven until the checks in
-[`docs/buildroot-test-plan.md`](../docs/buildroot-test-plan.md) pass on
-hardware.
+The tree **has been built**: a full cross-build on x86_64 produced
+`sdcard.img`, with the image hashes, partition layout and the checks run on them
+recorded in [`docs/buildroot-build.md`](../docs/buildroot-build.md). It has
+**not been booted** — there is no Raspberry Pi 5 run yet — so nothing about
+boot-time behaviour is proven until
+[`docs/buildroot-test-plan.md`](../docs/buildroot-test-plan.md) P1 and later
+pass on hardware.

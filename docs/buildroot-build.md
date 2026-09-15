@@ -1,14 +1,58 @@
 # Buildroot kiosk build (#26)
 
+## Recorded build
+
+A full cross-build has been run on Arch Linux (x86_64, 14 CPUs, rsync 3.5.0,
+wget 1.25.0, bc 1.08.2) against the pinned commit below, with the command in
+"Commands" (`-j14`, no `local.mk`), and it completed: `sdcard.img` (491 MiB)
+came out of `buildroot/output/images/`. Hashes of that build, partition layout,
+image contents and the checks run against them are recorded
+[below](#what-was-checked-on-that-build).
+
+| Image | Bytes | SHA-256 |
+| --- | --- | --- |
+| `sdcard.img` | 514850816 | `cab0caef27f6d8ae5a973d403876f74211b580a762f893fdff587703a2793bb3` |
+| `rootfs.squashfs` | 111083520 | `6d49b2850b2c8f65eb31a72cb9c451a9936459d4812e9101e314b002c4b63d7c` |
+| `data.ext4` | 268435456 | `adf5d610bde6fd8731b62f34027faf251f952a4f0849c6aac28e9d60e0dda274` |
+| `boot.vfat` | 134217728 | `bc08109fb0afa3c03132545e9d225e11c87f540db37627327d60c2e5ec0f1120` |
+
+Pinning fixes versions, not bytes: a rebuild elsewhere is not expected to
+reproduce these digests.
+
+## What was checked on that build
+
+- Partitions (`sfdisk`): 2048-264191 FAT32 bootable (128 MiB), 264192-481279
+  Linux rootfs (106 MiB), 481280-1005567 Linux data (256 MiB); disk identifier
+  `0x49475246`.
+- `rootfs.squashfs`: SquashFS 4.0 (zlib), 10413 inodes, 10927 entries listed
+  with Buildroot's own `unsquashfs`. It contains `usr/bin/igrf-app` (aarch64
+  ELF, 13800224 bytes), `usr/bin/onboard`, the `gi/_gi_cairo` bridge,
+  `usr/lib/systemd/system/igrf-app.service` (`User=igrf`), the `/usr/lib/igrf/`
+  helpers, `SystemConfig.example.json`, `etc/X11/xinit/xinitrc` and the compiled
+  dconf database.
+- `/etc/passwd` in the image carries `igrf:x:1000:1000:...`. The users table is
+  applied through the per-filesystem fakeroot script, so the identity is in the
+  image and deliberately not in `output/target`.
+- `data.ext4`: `e2fsck -fn` clean, label `data`, 12 files, and byte-identical to
+  partition 3 of `sdcard.img` (`cmp` over the full 256 MiB).
+- All 83 defconfig symbols are present in the resolved `.config`, and the Bootlin
+  toolchain tarball's SHA-256 matches the pinned `.hash`.
+- The image carries no updater tools: only what the packages and the overlay
+  install.
+
+Two failures were hit and fixed while producing it, both in this tree:
+`python-gobject` built without pycairo, which Onboard's cairo bridge needs, and
+`host-dconf` installed its systemd unit outside the host prefix.
+
 ## Not verified
 
-No full cross-build or Pi 5 boot has been run. Rust 1.97.1 clearing the resolved
-crate MSRV 1.95 is a version comparison, not a compile proof. Onboard's native
-Python extensions and GI typelibs under host QEMU remain unproven, as does rfd's
-GTK3 backend against Buildroot GTK3. The HDMI/USB panel model is unknown.
-The [hardware test plan](buildroot-test-plan.md) has no passing hardware results.
-The image supplies the OS contracts; new app controls and logging/recovery
-behaviour listed below are not implemented by the platform tickets.
+No Raspberry Pi 5 boot has been run, so the HDMI/USB panel model, touch edges,
+display mode, Wi-Fi firmware, boot time and the `/data` grow path are unproven,
+as is Onboard's show/hide ownership (P1.3). The
+[hardware test plan](buildroot-test-plan.md) still has no passing hardware
+results, so acceptance criteria 1-8 of the design remain unmet. The image
+supplies the OS contracts; new app controls and logging/recovery behaviour
+listed below are not implemented by the platform tickets.
 
 ## Pins and prerequisites
 
