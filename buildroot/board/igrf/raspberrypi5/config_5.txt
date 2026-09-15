@@ -5,5 +5,6 @@ dtoverlay=vc4-kms-v3d
 disable_fw_kms_setup=1
 enable_uart=0
 
-# Provisional HDMI-A-1 mode is in cmdline.txt. The 1024x600 panel model,
-# connector, refresh rate and USB touch driver still need hardware testing.
+# Provisional HDMI-A-1 mode is in cmdline_5.txt (installed as cmdline.txt on
+# the boot partition). The 1024x600 panel model, connector, refresh rate and
+# USB touch driver still need hardware testing.

@@ -12,6 +12,6 @@ polkit.addRule(function(action, subject) {
     // Only start the validated eject helper, not arbitrary systemd services.
     if (action.id === "org.freedesktop.systemd1.manage-units" &&
         action.lookup("verb") === "start" &&
-        /^igrf-usb-eject@sd[a-z]+[0-9]*\.service$/.test(action.lookup("unit")))
+        /^igrf-usb-eject@sd[a-z]+[1-9][0-9]*\.service$/.test(action.lookup("unit")))
         return polkit.Result.YES;
 });
