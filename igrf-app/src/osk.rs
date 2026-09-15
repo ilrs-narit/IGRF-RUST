@@ -100,7 +100,11 @@ mod platform {
                 } else {
                     self.start();
                 }
-            } else if self.keyboard_alive() {
+            } else {
+                // Hide even when this app did not start the keyboard: the
+                // session's XDG autostart owns Onboard, and a second process
+                // forwards `Show` to it but there is no equivalent for `Hide`.
+                // A call that finds no keyboard is discarded by the worker.
                 self.call("Hide");
             }
             self.visible = want;

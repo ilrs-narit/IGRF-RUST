@@ -12,6 +12,10 @@ import subprocess
 import tempfile
 import uuid
 
+# SQLite sidecars. They are never copied into a backup and never accepted from
+# one: the backup carries a standalone snapshot of the main database instead.
+SQLITE_SIDECARS = ('tle_data.db-wal', 'tle_data.db-shm', 'tle_data.db-journal')
+
 
 def digest(path):
     h = hashlib.sha256()
@@ -88,7 +92,7 @@ def backup(data, destination, version):
         payload.mkdir()
         entries = {}
         for name, path in source.items():
-            if name in ('tle_data.db-wal', 'tle_data.db-shm', 'tle_data.db-journal'):
+            if name in SQLITE_SIDECARS:
                 continue
             target = payload / name
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -126,7 +130,7 @@ def validate(archive):
         path = PurePosixPath(name)
         if not name or path.is_absolute() or '..' in path.parts or path.as_posix() != name:
             raise ValueError(f'Unsafe backup path: {name}')
-        if name in ('tle_data.db-wal', 'tle_data.db-shm', 'tle_data.db-journal'):
+        if name in SQLITE_SIDECARS:
             raise ValueError('Backup must contain a standalone SQLite snapshot')
         key = 'files/' + name
         expected.add(key)

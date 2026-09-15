@@ -26,20 +26,11 @@ comparison, not a compile proof — see "Not verified" below.
 
 ## Build
 
-```bash
-# From the repository root. Fetch Buildroot 2026.08 and check out the pin first.
-git clone https://gitlab.com/buildroot.org/buildroot.git buildroot-src
-git -C buildroot-src checkout d5180309b1b66ef3b8eaccca70ad69be8e0729a1
-
-make -C buildroot-src BR2_EXTERNAL=$PWD/buildroot igrf_raspberrypi5_defconfig
-make -C buildroot-src BR2_EXTERNAL=$PWD/buildroot
-```
-
-The image lands in `buildroot-src/output/images/sdcard.img`. Write it to a
-microSD card (32 GB or larger) with `dd` or Raspberry Pi Imager.
-
-Buildroot output and the download cache are not committed; see the root
-`.gitignore`.
+The authoritative build procedure — host prerequisites, the pinned checkout,
+the `O=`/`BR2_DL_DIR=` invocation, the image location, and what remains
+unproven — is [`docs/buildroot-build.md`](../docs/buildroot-build.md). It is
+deliberately not copied here: two recipes drift apart, and this file owns the
+pin and the layout, not the commands.
 
 ## Layout
 

@@ -32,6 +32,9 @@ BR2_cortex_a76=y
 BR2_TOOLCHAIN_EXTERNAL=y
 BR2_TOOLCHAIN_EXTERNAL_BOOTLIN=y
 BR2_TOOLCHAIN_EXTERNAL_BOOTLIN_AARCH64_GLIBC_STABLE=y
+# Kept at the in-tree path from the upstream base: it carries the pinned
+# kernel and kernel-headers hashes (board/raspberrypi/patches/*/*.hash) that
+# BR2_DOWNLOAD_FORCE_CHECK_HASHES requires. This tree adds no patches there.
 BR2_GLOBAL_PATCH_DIR="board/raspberrypi/patches"
 BR2_DOWNLOAD_FORCE_CHECK_HASHES=y
 BR2_SYSTEM_DHCP=""
@@ -120,7 +123,6 @@ BR2_PACKAGE_HOST_RUSTC=y
 
 # Read-only root filesystem image.
 BR2_TARGET_ROOTFS_SQUASHFS=y
-# BR2_TARGET_ROOTFS_TAR is not set
 BR2_PACKAGE_HOST_DOSFSTOOLS=y
 BR2_PACKAGE_HOST_GENIMAGE=y
 BR2_PACKAGE_HOST_KMOD_XZ=y
@@ -140,3 +142,7 @@ BR2_PACKAGE_SYSTEMD_TIMESYNCD=y
 # BR2_PACKAGE_SYSTEMD_NETWORKD is not set
 # BR2_PACKAGE_SYSTEMD_RESOLVED is not set
 BR2_ROOTFS_USERS_TABLES="$(BR2_EXTERNAL_IGRF_PATH)/board/igrf/raspberrypi5/users.txt"
+
+# No tar rootfs is shipped: the disk image is assembled by genimage from the
+# squashfs root and the ext4 /data partition (see board/.../genimage.cfg).
+# BR2_TARGET_ROOTFS_TAR is not set

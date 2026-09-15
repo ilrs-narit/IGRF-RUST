@@ -18,6 +18,12 @@ and [partx](https://man7.org/linux/man-pages/man8/partx.8.html). Updating a live
 microSD partition map and interrupted growth still require hardware tests;
 this is not a guarantee against power-loss damage to the MBR or filesystem.
 
+There is deliberately no `/etc/fstab`: the systemd skeleton ships none, and only
+the mount unit can carry the `Requires=igrf-grow-data.service` ordering that
+must finish before `/data` is mounted — an fstab line cannot express it. `/data`
+is read-write because `data.mount` says `Options=rw,noatime,nodev,nosuid`; the
+kernel command line stays `ro` for every other filesystem.
+
 The build users table creates `igrf` (UID/GID 1000, locked password) before
 SquashFS is created, with video/render and serial dialout group access.
 The matching sysusers entry records that identity;
