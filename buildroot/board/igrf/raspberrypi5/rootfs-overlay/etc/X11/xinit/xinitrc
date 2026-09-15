@@ -1,0 +1,39 @@
+#!/bin/sh
+# IGRF kiosk X session, run as user "igrf" by /etc/X11/igrf-x11-session.sh
+# (which owns the Xorg process). The application itself is NOT started here:
+# igrf-app.service is ordered After=igrf-x11-session.service and runs it.
+
+export DISPLAY=:0
+
+# Onboard must stay an X11 client: it types through XTEST, which only works
+# against the X server. Without this, GTK would switch to a Wayland backend
+# the moment a WAYLAND_DISPLAY variable leaks into the environment, and no
+# key event would ever reach the app's X11 window (see igrf-app/src/osk.rs).
+export GDK_BACKEND=x11
+
+# Session D-Bus. igrf-app calls `gdbus call --session` with only DISPLAY in
+# its environment, so the bus address has to be discoverable, not inherited:
+# dbus-launch publishes it as the _DBUS_SESSION_BUS_ADDRESS property on the
+# X root window (and in ~/.dbus/session-bus/), which is exactly where the
+# standard dbus-launch autolaunch fallback in GLib looks. A private
+# dbus-run-session bus would be invisible to the app's unit.
+if [ -z "${DBUS_SESSION_BUS_ADDRESS:-}" ]; then
+    eval "$(dbus-launch --sh-syntax)"
+    export DBUS_SESSION_BUS_ADDRESS
+fi
+
+# XDG autostart. matchbox is only a window manager and executes no autostart
+# entries by itself, so run them here. Only plain Exec= lines are honoured —
+# the entries in this image (onboard) need nothing more. Onboard's own
+# persistent settings (dock, layout, theme) come from the dconf system
+# database owned by issue #20 (etc/dconf/**); nothing here writes them.
+for desktop in /etc/xdg/autostart/*.desktop; do
+    [ -e "$desktop" ] || continue
+    cmd=$(sed -n 's/^Exec=//p' "$desktop" | head -n 1)
+    [ -n "$cmd" ] && $cmd &
+done
+
+# Window manager, in the foreground: when it exits the session launcher
+# brings Xorg down and systemd restarts the unit. No title bars — the kiosk
+# app is a single borderless fullscreen window.
+exec matchbox-window-manager -use_titlebar no

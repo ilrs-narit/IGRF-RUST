@@ -1,0 +1,25 @@
+[Unit]
+Description=IGRF X11 kiosk session (Xorg, matchbox, session D-Bus)
+# Name contract: igrf-app.service orders itself After=igrf-x11-session.service
+# — this unit must keep this exact name.
+#
+# Boot position: after the system D-Bus, logind and the console gettys are
+# set up. The session takes vt7, so it never fights a getty for a console.
+# WantedBy=multi-user.target matches igrf-app.service, so the kiosk comes up
+# with the normal multi-user boot and needs no graphical.target.
+After=dbus.service systemd-logind.service getty.target
+
+[Service]
+Type=simple
+# Runs as root so Xorg can open the DRM/input devices and vt7 without a
+# logind session; the launcher immediately drops to user "igrf" for the
+# session itself (session D-Bus must share the app's uid for D-Bus EXTERNAL
+# authentication — see the script).
+ExecStart=/etc/X11/igrf-x11-session.sh
+# Kiosk: if the X server or the window manager dies, bring the whole session
+# back. igrf-app.service has its own bounded retry policy on top of this.
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
