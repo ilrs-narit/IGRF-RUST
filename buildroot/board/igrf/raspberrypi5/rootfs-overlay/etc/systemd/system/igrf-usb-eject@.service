@@ -1,0 +1,7 @@
+[Unit]
+Description=Flush and safely unmount IGRF USB media %I
+After=igrf-usb@%i.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/lib/igrf/usb-media.py eject %i
