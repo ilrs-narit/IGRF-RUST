@@ -1,0 +1,9 @@
+kernel=Image
+arm_64bit=1
+disable_overscan=1
+dtoverlay=vc4-kms-v3d
+disable_fw_kms_setup=1
+enable_uart=0
+
+# Provisional HDMI-A-1 mode is in cmdline.txt. The 1024x600 panel model,
+# connector, refresh rate and USB touch driver still need hardware testing.

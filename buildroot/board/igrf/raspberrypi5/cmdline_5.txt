@@ -1,0 +1,1 @@
+root=/dev/mmcblk0p2 rootfstype=squashfs rootwait ro console=tty1 quiet loglevel=3 vt.global_cursor_default=0 video=HDMI-A-1:1024x600@60D
