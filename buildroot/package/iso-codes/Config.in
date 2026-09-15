@@ -1,1 +1,6 @@
-# Placeholder: filled in by the onboard dependency ticket (issue #20).
+config BR2_PACKAGE_ISO_CODES
+	bool "iso-codes"
+	help
+	  ISO language and country names used by Onboard.
+
+	  https://salsa.debian.org/iso-codes-team/iso-codes
