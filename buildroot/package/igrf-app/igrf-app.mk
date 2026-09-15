@@ -29,6 +29,18 @@ IGRF_APP_SITE_METHOD = local
 IGRF_APP_OVERRIDE_SRCDIR ?= $(abspath $(BR2_EXTERNAL_IGRF_PATH)/..)
 IGRF_APP_SITE = $(IGRF_APP_OVERRIDE_SRCDIR)
 
+# The override is rsynced as-is, and the default points at a developer
+# checkout: target/ holds cargo artifacts, buildroot-src/ the pinned Buildroot
+# tree, dl/ the download cache and output/ the very build tree this package is
+# built from. Without these exclusions the rsync copies gigabytes and
+# duplicates the output tree inside the package's build directory.
+IGRF_APP_OVERRIDE_SRCDIR_RSYNC_EXCLUSIONS = \
+	--exclude /target \
+	--exclude /buildroot-src \
+	--exclude /buildroot/dl \
+	--exclude /buildroot/output \
+	--exclude /logs
+
 # Release path (NOT in use for the prototype): a pinned tarball plus a real
 # .hash covering it. The cargo infrastructure runs `cargo vendor` at download
 # time and caches the dependencies inside the tarball in DL_DIR, so the hash
