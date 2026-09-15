@@ -1,4 +1,6 @@
 [Unit]
+StartLimitBurst=3
+StartLimitIntervalSec=300
 Description=IGRF X11 kiosk session (Xorg, matchbox, session D-Bus)
 # Name contract: igrf-app.service orders itself After=igrf-x11-session.service
 # — this unit must keep this exact name.
@@ -10,7 +12,11 @@ Description=IGRF X11 kiosk session (Xorg, matchbox, session D-Bus)
 After=dbus.service systemd-logind.service getty.target
 
 [Service]
-Type=simple
+Type=notify
+NotifyAccess=all
+RuntimeDirectory=igrf-x11
+RuntimeDirectoryMode=0755
+ExecStartPre=/bin/chown igrf:igrf /run/igrf-x11
 # Runs as root so Xorg can open the DRM/input devices and vt7 without a
 # logind session; the launcher immediately drops to user "igrf" for the
 # session itself (session D-Bus must share the app's uid for D-Bus EXTERNAL
@@ -20,6 +26,7 @@ ExecStart=/etc/X11/igrf-x11-session.sh
 # back. igrf-app.service has its own bounded retry policy on top of this.
 Restart=always
 RestartSec=2
+TimeoutStartSec=45
 
 [Install]
 WantedBy=multi-user.target
