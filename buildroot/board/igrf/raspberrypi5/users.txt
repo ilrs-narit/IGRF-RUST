@@ -1,0 +1,2 @@
+# Pre-create the identity while /etc is writable during image assembly.
+igrf 1000 igrf 1000 ! /data/igrf /usr/sbin/nologin video,render,dialout IGRF kiosk
