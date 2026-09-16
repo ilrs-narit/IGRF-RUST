@@ -48,7 +48,7 @@ PYTHON_PYCAIRO_POST_INSTALL_TARGET_HOOKS += ONBOARD_STAGE_PYCAIRO
 define ONBOARD_COMPILE_DEFAULTS
 	mkdir -p $(TARGET_DIR)/etc/dconf/db
 	$(HOST_DIR)/bin/dconf compile $(TARGET_DIR)/etc/dconf/db/local \
-		$(BR2_EXTERNAL_IGRF_PATH)/board/igrf/raspberrypi5/rootfs-overlay/etc/dconf/db/local.d
+		$(BR2_EXTERNAL_IGRF_PATH)/board/igrf/raspberrypi4/rootfs-overlay/etc/dconf/db/local.d
 endef
 ONBOARD_TARGET_FINALIZE_HOOKS += ONBOARD_COMPILE_DEFAULTS
 

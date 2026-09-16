@@ -37,7 +37,7 @@ for package in ('onboard', 'dconf', 'hunspell', 'iso-codes', 'python-distutils-e
 keys = {s.attrib['path'].strip('/'): {k.attrib['name'] for k in s.findall('key')}
         for s in schema.findall('schema')}
 defaults = configparser.ConfigParser()
-defaults.read(packages.parent / 'board/igrf/raspberrypi5/rootfs-overlay/etc/dconf/db/local.d/00-onboard')
+defaults.read(packages.parent / 'board/igrf/raspberrypi4/rootfs-overlay/etc/dconf/db/local.d/00-onboard')
 for section in defaults.sections():
     assert set(defaults[section]) <= keys[section], section
 print('All five source/license hashes, ISO XML generation, and Onboard default keys passed.')

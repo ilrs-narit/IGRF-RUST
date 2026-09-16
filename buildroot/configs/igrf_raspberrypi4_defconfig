@@ -1,8 +1,10 @@
-# IGRF kiosk defconfig for Raspberry Pi 5 (Buildroot 2026.08)
+# IGRF kiosk defconfig for Raspberry Pi 4 (Buildroot 2026.08)
 #
-# Base: the 2026.08 configs/raspberrypi5_defconfig, reproduced verbatim
+# Base: the 2026.08 configs/raspberrypi4_64_defconfig, reproduced verbatim
 # except where this file says otherwise. Pinned Buildroot: release 2026.08,
 # commit d5180309b1b66ef3b8eaccca70ad69be8e0729a1 (Rust 1.97.1 via rust-bin).
+# Platform: ADR 0003 — the prototype hardware is a Raspberry Pi 4 Model B;
+# the earlier Pi 5 configuration was replaced, not kept alongside.
 #
 # Changes from the upstream base:
 #   - systemd init instead of busybox init
@@ -10,13 +12,13 @@
 #     (BR2_TARGET_ROOTFS_EXT2* removed; the root stays read-only, /var is a
 #     tmpfs populated from the systemd "factory")
 #   - rootfs overlay, extra patch dir and post-build/post-image hooks from
-#     this BR2_EXTERNAL tree, appended after the in-tree raspberrypi5 ones
+#     this BR2_EXTERNAL tree, appended after the in-tree raspberrypi4-64 ones
 #   - packages for the kiosk: igrf-app, onboard, NetworkManager + Wi-Fi,
-#     X11/Mesa3D (V3D — Pi 5 GPU, not vc4), GTK3, matchbox, python3 +
-#     gobject-introspection, exFAT tools, host Rust compiler
+#     X11/Mesa3D (V3D — Pi 4 / VideoCore VI, not vc4), GTK3, matchbox,
+#     python3 + gobject-introspection, exFAT tools, host Rust compiler
 #
 # UNVERIFIED: this defconfig has not been through a real Buildroot build.
-# No cross-build has been run and no Raspberry Pi 5 has booted it; the
+# No cross-build has been run and no Raspberry Pi 4 has booted it; the
 # design doc (docs/buildroot-design.md) forbids claiming build results.
 # Every symbol below is traceable to the Buildroot 2026.08 tree, except
 # BR2_PACKAGE_IGRF_APP and BR2_PACKAGE_ONBOARD, which are defined by the
@@ -28,7 +30,7 @@
 # choice and is not pre-empted here.
 
 BR2_aarch64=y
-BR2_cortex_a76=y
+BR2_cortex_a72=y
 BR2_TOOLCHAIN_EXTERNAL=y
 BR2_TOOLCHAIN_EXTERNAL_BOOTLIN=y
 BR2_TOOLCHAIN_EXTERNAL_BOOTLIN_AARCH64_GLIBC_STABLE=y
@@ -38,28 +40,29 @@ BR2_TOOLCHAIN_EXTERNAL_BOOTLIN_AARCH64_GLIBC_STABLE=y
 BR2_GLOBAL_PATCH_DIR="board/raspberrypi/patches"
 BR2_DOWNLOAD_FORCE_CHECK_HASHES=y
 BR2_SYSTEM_DHCP=""
-BR2_ROOTFS_POST_BUILD_SCRIPT="board/raspberrypi5/post-build.sh $(BR2_EXTERNAL_IGRF_PATH)/board/igrf/raspberrypi5/post-build.sh"
-# The in-tree raspberrypi5 post-image.sh is deliberately NOT chained: it
+BR2_ROOTFS_POST_BUILD_SCRIPT="board/raspberrypi4-64/post-build.sh $(BR2_EXTERNAL_IGRF_PATH)/board/igrf/raspberrypi4/post-build.sh"
+# The in-tree raspberrypi4-64 post-image.sh is deliberately NOT chained: it
 # builds an ext2/ext4 rootfs image and genimage.cfg.in names rootfs.ext4,
 # which no longer exists now that the root filesystem is squashfs. Our own
 # post-image.sh produces the boot + squashfs root + /data disk image.
-BR2_ROOTFS_POST_IMAGE_SCRIPT="$(BR2_EXTERNAL_IGRF_PATH)/board/igrf/raspberrypi5/post-image.sh"
-BR2_ROOTFS_OVERLAY="$(BR2_EXTERNAL_IGRF_PATH)/board/igrf/raspberrypi5/rootfs-overlay"
+BR2_ROOTFS_POST_IMAGE_SCRIPT="$(BR2_EXTERNAL_IGRF_PATH)/board/igrf/raspberrypi4/post-image.sh"
+BR2_ROOTFS_OVERLAY="$(BR2_EXTERNAL_IGRF_PATH)/board/igrf/raspberrypi4/rootfs-overlay"
 BR2_LINUX_KERNEL=y
 BR2_LINUX_KERNEL_CUSTOM_TARBALL=y
 BR2_LINUX_KERNEL_CUSTOM_TARBALL_LOCATION="$(call github,raspberrypi,linux,21b410140c47ffab5668399f6f143c7d7b935c8b)/linux-21b410140c47ffab5668399f6f143c7d7b935c8b.tar.gz"
-BR2_LINUX_KERNEL_DEFCONFIG="bcm2712"
-BR2_LINUX_KERNEL_CONFIG_FRAGMENT_FILES="board/raspberrypi/linux-4k-page-size.fragment $(BR2_EXTERNAL_IGRF_PATH)/board/igrf/raspberrypi5/linux.fragment"
+BR2_LINUX_KERNEL_DEFCONFIG="bcm2711"
+BR2_LINUX_KERNEL_CONFIG_FRAGMENT_FILES="board/raspberrypi/linux-4k-page-size.fragment $(BR2_EXTERNAL_IGRF_PATH)/board/igrf/raspberrypi4/linux.fragment"
 BR2_LINUX_KERNEL_DTS_SUPPORT=y
-BR2_LINUX_KERNEL_INTREE_DTS_NAME="broadcom/bcm2712-rpi-5-b broadcom/bcm2712d0-rpi-5-b broadcom/bcm2712-rpi-500"
+BR2_LINUX_KERNEL_INTREE_DTS_NAME="broadcom/bcm2711-rpi-4-b broadcom/bcm2711-rpi-400 broadcom/bcm2711-rpi-cm4 broadcom/bcm2711-rpi-cm4s"
 BR2_LINUX_KERNEL_NEEDS_HOST_OPENSSL=y
 BR2_PACKAGE_BUSYBOX_SHOW_OTHERS=y
 BR2_PACKAGE_XZ=y
 BR2_PACKAGE_RPI_FIRMWARE=y
-BR2_PACKAGE_RPI_FIRMWARE_CONFIG_FILE="$(BR2_EXTERNAL_IGRF_PATH)/board/igrf/raspberrypi5/config_5.txt"
-BR2_PACKAGE_RPI_FIRMWARE_CMDLINE_FILE="$(BR2_EXTERNAL_IGRF_PATH)/board/igrf/raspberrypi5/cmdline_5.txt"
-# The KMS overlay (dtoverlay=vc4-kms-v3d) set in config_5.txt lives in the
-# firmware's overlays/ directory, so the overlays must be installed.
+BR2_PACKAGE_RPI_FIRMWARE_VARIANT_PI4=y
+BR2_PACKAGE_RPI_FIRMWARE_CONFIG_FILE="$(BR2_EXTERNAL_IGRF_PATH)/board/igrf/raspberrypi4/config_4_64bit.txt"
+BR2_PACKAGE_RPI_FIRMWARE_CMDLINE_FILE="$(BR2_EXTERNAL_IGRF_PATH)/board/igrf/raspberrypi4/cmdline_4.txt"
+# The KMS overlay (dtoverlay=vc4-kms-v3d) set in config_4_64bit.txt lives in
+# the firmware's overlays/ directory, so the overlays must be installed.
 BR2_PACKAGE_RPI_FIRMWARE_INSTALL_DTB_OVERLAYS=y
 BR2_PACKAGE_KMOD=y
 BR2_PACKAGE_KMOD_TOOLS=y
@@ -83,7 +86,7 @@ BR2_PACKAGE_IW=y
 BR2_PACKAGE_BRCMFMAC_SDIO_FIRMWARE_RPI=y
 BR2_PACKAGE_BRCMFMAC_SDIO_FIRMWARE_RPI_WIFI=y
 
-# Graphics: X11, Mesa3D with the V3D gallium driver (Pi 5 / VideoCore VII;
+# Graphics: X11, Mesa3D with the V3D gallium driver (Pi 4 / VideoCore VI;
 # V3D selects the vc4 driver itself as its runtime), GTK3 on X11, and the
 # matchbox window manager.
 BR2_PACKAGE_XORG7=y
@@ -141,7 +144,7 @@ BR2_PACKAGE_SYSTEMD_TIMEDATED=y
 BR2_PACKAGE_SYSTEMD_TIMESYNCD=y
 # BR2_PACKAGE_SYSTEMD_NETWORKD is not set
 # BR2_PACKAGE_SYSTEMD_RESOLVED is not set
-BR2_ROOTFS_USERS_TABLES="$(BR2_EXTERNAL_IGRF_PATH)/board/igrf/raspberrypi5/users.txt"
+BR2_ROOTFS_USERS_TABLES="$(BR2_EXTERNAL_IGRF_PATH)/board/igrf/raspberrypi4/users.txt"
 
 # No tar rootfs is shipped: the disk image is assembled by genimage from the
 # squashfs root and the ext4 /data partition (see board/.../genimage.cfg).
