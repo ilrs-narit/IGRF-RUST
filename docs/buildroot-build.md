@@ -4,23 +4,24 @@
 
 A full cross-build has been run on Arch Linux (x86_64, 14 CPUs, rsync 3.5.0,
 wget 1.25.0, bc 1.08.2) against the pinned commit below, with the command in
-"Commands" (`-j14`, no `local.mk`), and it completed: `sdcard.img` (491 MiB)
+"Commands" (`-j14`, no `local.mk`), and it completed: `sdcard.img` (496 MiB)
 came out of `buildroot/output/images/`. Hashes of that build, partition layout,
 image contents and the checks run against them are recorded
 [below](#what-was-checked-on-that-build).
 
-The host session interrupted the build twice and then rebuilt it after the
-first-boot fixes below; the invocations share one log, and the recorded images
-come from the last, which exited 0. Resuming is safe at package boundaries, but
-the interruption is part of the record, not something a reproduction should
-copy. Earlier Raspberry Pi 5 records remain in this file's git history.
+The host session interrupted the build twice and the image was rebuilt after
+each round of boot fixes below; the invocations share one log, and the recorded
+images come from the last build, which exited 0. Resuming is safe at package
+boundaries, but the interruption is part of the record, not something a
+reproduction should copy. Earlier Raspberry Pi 5 records remain in this file's
+git history.
 
 | Image | Bytes | SHA-256 |
 | --- | --- | --- |
-| `sdcard.img` | 514850816 | `276c9e32c3f9271d00ba1677fc554fc95f7d82e0c99fa11f6880bc47f0f199d5` |
-| `rootfs.squashfs` | 111075328 | `f3b6a28b132a4212daf131e55d6cc2a4ca553f9a85458157ad2e2326ed9f5bba` |
-| `data.ext4` | 268435456 | `69f1f0d15641e94ef3a7581e8a139e2a7870b510c8f5f743add57de7bd658cae` |
-| `boot.vfat` | 134217728 | `3638751556eb935e3b2cd47de15d8727070f83d32830c536113510e0be129da0` |
+| `sdcard.img` | 520093696 | `c7e9ebf10a60e6034ef80151f5b7a7be090b5fcf4d4c170774ee06e631019655` |
+| `rootfs.squashfs` | 115511296 | `62c183dffa1a9e373e47175ac964b0ad95d2f480383c24bcd49619fc63dfabd1` |
+| `data.ext4` | 268435456 | `6821a764bae67ac833b734c2155e8392dccf3754bc1c72a9df730c4b36c1e331` |
+| `boot.vfat` | 134217728 | `4af66d786b64d7e61f7de00ed50804cc70434e5bc02af20754870917ffaeeb2c` |
 | `Image` (kernel) | 24496640 | inside `boot.vfat` |
 
 Pinning fixes versions, not bytes: a rebuild elsewhere is not expected to
@@ -28,8 +29,8 @@ reproduce these digests.
 
 ## What was checked on that build
 
-- Partitions (`sfdisk`): 2048-264191 FAT32 bootable (128 MiB), 264192-481279
-  Linux rootfs (106 MiB), 481280-1005567 Linux data (256 MiB); disk identifier
+- Partitions (`sfdisk`): 2048-264191 FAT32 bootable (128 MiB), 264192-491519
+  Linux rootfs (111 MiB), 491520-1015807 Linux data (256 MiB); disk identifier
   `0x49475246`.
 - `boot.vfat`: `Image` (24496640 bytes), `bcm2711-rpi-4-b.dtb` and the `-400`,
   `-cm4`, `-cm4s` device trees, **`start4.elf` (2303232 bytes) and `fixup4.dat`
@@ -37,11 +38,13 @@ reproduce these digests.
   Pi 5 image deliberately did not carry — plus `config.txt` (533 bytes),
   `cmdline.txt` (137 bytes) and `overlays/` (358 dtbo files). `config.txt` and
   `cmdline.txt` in the image are byte-identical to the board files in this tree.
-- `rootfs.squashfs`: SquashFS 4.0, gzip, 10410 inodes, 10924 entries listed with
+- `rootfs.squashfs`: SquashFS 4.0, gzip, 10128 inodes, 10642 entries listed with
   Buildroot's own `unsquashfs`. It contains `usr/bin/igrf-app`,
   `usr/bin/onboard`, the `gi/_gi_cairo` bridge, `igrf-app.service` with its
   `data.conf` drop-in, the `/usr/lib/igrf/` helpers, `SystemConfig.example.json`,
-  `etc/X11/xinit/xinitrc` and the compiled dconf database. No `__pycache__` under
+  `etc/X11/xinit/xinitrc`, the compiled dconf database, Onboard's data under
+  `usr/share/onboard/` (nothing under `/share`), a compiled GSettings database
+  that names Onboard's schema, and DejaVu fonts. No `__pycache__` under
   `/usr/lib/igrf`; the only bytecode caches are Python's own standard-library
   ones.
 - `/etc/passwd` in the image carries
@@ -75,12 +78,36 @@ both re-checked against the image's own binaries:
   read-only root. `users.txt` now creates `sshd` at image build time, and the
   unit drop-in sets `RuntimeDirectory=sshd` for the directory sshd also needs.
 
+The second boot reached the X server and failed there as well; three image
+problems were found and fixed:
+
+- `modesetting_drv.so` failed to load with `undefined symbol:
+  gbm_bo_get_plane_count`, and the server exited with "No drivers available".
+  The autotools build of xserver never links the modesetting driver against
+  `$(GBM_LIBS)`, although the driver calls `gbm_bo_get_plane_count()` and the
+  meson build lists `gbm_dep` for it. This tree patches it
+  (`buildroot/patches/xserver_xorg-server/`) through a new
+  `BR2_GLOBAL_PATCH_DIR` entry; `Makefile.in` is patched alongside
+  `Makefile.am` because the build uses the tarball's shipped `configure`. The
+  rebuilt module carries `NEEDED libgbm.so.1`, and loading it under
+  `qemu-aarch64` registers the modesetting driver; the pre-fix module
+  reproduces the boot error there.
+- Onboard's `data_files` resolve against a "/" prefix in this cross build, so
+  its data, D-Bus service file and GSettings schema landed in `/share`, and the
+  schema XML never reached the staging directory from which libglib2 compiles
+  the target's schema database at finalization. The package hook now merges
+  `/share` into `/usr/share` and copies the schema XML into staging; the image's
+  schema database contains Onboard's schema, where before it was absent.
+- GTK and Onboard had no scalable font — the image carried only X11 bitmap
+  fonts — so the image now selects DejaVu.
+
 ## Not verified
 
-No Raspberry Pi 4 boot has been run — the superseded Pi 5 image was never booted
-either — so the HDMI/USB panel model, touch edges,
-display mode, Wi-Fi firmware, boot time and the `/data` grow path are unproven,
-as is Onboard's show/hide ownership (P1.3). The
+No Raspberry Pi 4 boot has reached the kiosk yet — the first boot stopped at the
+console and the second at the X server, both sets of failures recorded above —
+so the HDMI/USB panel model, touch edges, display mode, Wi-Fi firmware, boot
+time and the `/data` grow path are unproven, as is Onboard's show/hide ownership
+(P1.3). The
 [hardware test plan](buildroot-test-plan.md) still has no passing hardware
 results, so acceptance criteria 1-8 of the design remain unmet. The image
 supplies the OS contracts; new app controls and logging/recovery behaviour
