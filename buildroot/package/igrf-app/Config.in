@@ -1,0 +1,23 @@
+config BR2_PACKAGE_IGRF_APP
+	bool "igrf-app"
+	depends on BR2_PACKAGE_HOST_RUSTC_TARGET_ARCH_SUPPORTS
+	# libgtk3 (and its X11 backend) prerequisites, because this package
+	# selects them below.
+	depends on BR2_PACKAGE_HOST_RUSTC_ARCH_SUPPORTS # host-libgtk3 -> host-librsvg
+	depends on BR2_USE_MMU # glib2
+	depends on BR2_USE_WCHAR # glib2
+	depends on BR2_TOOLCHAIN_HAS_THREADS # glib2
+	depends on BR2_INSTALL_LIBSTDCPP # pango
+	depends on BR2_TOOLCHAIN_HAS_SYNC_4 # pango -> harfbuzz
+	depends on BR2_TOOLCHAIN_GCC_AT_LEAST_4_9 # pango -> harfbuzz
+	depends on BR2_PACKAGE_HAS_LIBGL # libgtk3 X11 backend
+	depends on BR2_PACKAGE_XORG7 # libgtk3 X11 backend
+	select BR2_PACKAGE_HOST_RUSTC
+	# The rfd gtk3 backend (map-grid file dialog) links GTK3 at runtime;
+	# the app forces GDK_BACKEND=x11, so the X11 GDK backend is required.
+	# The rest of the X11/GL platform stack (mesa3d V3D, WM) is pre-written
+	# by the defconfig (issue #16), not selected here.
+	select BR2_PACKAGE_LIBGTK3
+	select BR2_PACKAGE_LIBGTK3_X11
+	help
+	  IGRF magnetic field kiosk application

@@ -1,0 +1,12 @@
+[Unit]
+Description=Validate and grow IGRF microSD data partition
+DefaultDependencies=no
+Requires=dev-mmcblk0p3.device
+After=dev-mmcblk0p3.device
+Before=data.mount
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/python3 /usr/lib/igrf/grow-data.py
+RemainAfterExit=yes
+TimeoutStartSec=300

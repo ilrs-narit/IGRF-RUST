@@ -1,0 +1,2 @@
+# Filesystem identity is imported by the earlier persistent-storage rules.
+ACTION=="add", SUBSYSTEM=="block", ENV{ID_BUS}=="usb", ENV{ID_FS_TYPE}=="vfat|exfat", TAG+="systemd", ENV{SYSTEMD_WANTS}+="igrf-usb@%k.service"

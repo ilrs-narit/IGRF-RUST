@@ -1,0 +1,14 @@
+[Unit]
+Description=IGRF persistent data
+Requires=igrf-grow-data.service
+After=igrf-grow-data.service
+Before=local-fs.target
+
+[Mount]
+What=/dev/mmcblk0p3
+Where=/data
+Type=ext4
+Options=rw,noatime,nodev,nosuid
+
+[Install]
+WantedBy=local-fs.target

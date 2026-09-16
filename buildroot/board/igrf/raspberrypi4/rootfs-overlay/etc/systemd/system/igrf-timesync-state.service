@@ -1,0 +1,11 @@
+[Unit]
+Description=Prepare persistent last-known clock
+DefaultDependencies=no
+RequiresMountsFor=/data
+After=systemd-sysusers.service
+Before=systemd-timesyncd.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemd-tmpfiles --create /etc/tmpfiles.d/igrf-time.conf
+RemainAfterExit=yes

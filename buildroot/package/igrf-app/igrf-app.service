@@ -1,0 +1,42 @@
+[Unit]
+Description=IGRF magnetic field kiosk application
+# /data carries the app's whole persistent state (SystemConfig.json,
+# tle_data.db, logs/); the app resolves every path relative to its working
+# directory, so the data partition must be mounted before the process starts.
+RequiresMountsFor=/data
+# The X11 session/WM and D-Bus must be up first: the app forces X11
+# (DISPLAY, GDK_BACKEND below) and drives Onboard over `gdbus call
+# --session`. igrf-x11-session.service is the kiosk X11 session unit owned by
+# issue #18; ordering against a not-yet-existing unit is harmless to
+# systemd, and the bounded retry below absorbs the boot-time race.
+After=igrf-x11-session.service dbus.service
+# Bounded retry policy (design doc "เมื่อแอปปิดตัวผิดพลาด"): after 3 failed
+# starts within 5 minutes systemd stops trying instead of restarting forever.
+StartLimitBurst=3
+StartLimitIntervalSec=300
+# The app must start offline; Space-Track fetches and time sync use the
+# network only when it happens to be there. Wants-only, deliberately not
+# After=network-online.target.
+Wants=network-online.target
+
+[Service]
+Type=simple
+# Dedicated non-root account; created by the sysusers.d entry owned by issue
+# 21, which also creates and owns /data/igrf and seeds SystemConfig.json
+# from /usr/share/igrf/SystemConfig.example.json on first boot.
+User=igrf
+Group=igrf
+# The entire persistence mechanism: every config/database/log path in the
+# app is resolved relative to this directory. logs/ is created by the app.
+WorkingDirectory=/data/igrf
+Environment=DISPLAY=:0
+Environment=GDK_BACKEND=x11
+ExecStart=/usr/bin/igrf-app
+Restart=on-failure
+RestartSec=5
+# A restarted process always comes up in the STOPPED state and never resumes
+# coil control by itself. That is igrf-app behaviour (design doc, ADR 0002),
+# not something this unit does; the unit only restarts the process.
+
+[Install]
+WantedBy=multi-user.target

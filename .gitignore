@@ -18,6 +18,15 @@
 /test.bin
 __pycache__/
 
+# Buildroot: the checkout, its output tree and download cache are all
+# machine-local. Only the BR2_EXTERNAL tree under /buildroot/ is committed.
+/buildroot-src/
+/buildroot/output/
+/buildroot/dl/
+/buildroot/.config
+/buildroot/.config.old
+/buildroot/local.mk
+
 .agents/
 .claude/
 .omo/
