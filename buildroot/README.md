@@ -55,6 +55,8 @@ produced `sdcard.img`, and the image hashes, partition layout and the checks run
 on them are recorded in [`docs/buildroot-build.md`](../docs/buildroot-build.md)
 (an earlier Raspberry Pi 5 build was superseded by
 [ADR 0003](../docs/adr/0003-pi4-kiosk-platform.md) before it was ever booted).
-It has **not been booted**: nothing about boot-time behaviour is proven until
+The first card booted to a console but not to the kiosk session; the two causes
+found are fixed in this tree and recorded in the build doc. Nothing about
+boot-time behaviour is proven until
 [`docs/buildroot-test-plan.md`](../docs/buildroot-test-plan.md) P1 and later
 pass on hardware.

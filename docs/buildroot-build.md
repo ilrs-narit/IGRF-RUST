@@ -9,18 +9,18 @@ came out of `buildroot/output/images/`. Hashes of that build, partition layout,
 image contents and the checks run against them are recorded
 [below](#what-was-checked-on-that-build).
 
-The host session interrupted the build twice and it resumed from its own stamps
-(three `make` invocations appear in the log); the recorded images come from the
-last invocation, which exited 0. Resuming is safe at package boundaries, but the
-interruption is part of the record, not something a reproduction should copy.
-Earlier Raspberry Pi 5 records remain in this file's git history.
+The host session interrupted the build twice and then rebuilt it after the
+first-boot fixes below; the invocations share one log, and the recorded images
+come from the last, which exited 0. Resuming is safe at package boundaries, but
+the interruption is part of the record, not something a reproduction should
+copy. Earlier Raspberry Pi 5 records remain in this file's git history.
 
 | Image | Bytes | SHA-256 |
 | --- | --- | --- |
-| `sdcard.img` | 514850816 | `c9e946c4525eccb89005f3f38370aa38cf0e186a23566c55c5c4bfb9dd8db676` |
-| `rootfs.squashfs` | 110968832 | `9595e3096c60012110ee256bfc7b75faabb15552d3c4b39d0a2d68b21fdd0672` |
-| `data.ext4` | 268435456 | `a2f40f1a25798369f3a525af1c2518c19a316e62b222353b2ca342523e281fa0` |
-| `boot.vfat` | 134217728 | `403537093c4286548c2d67747cd35b271ebeb3501c22477e6f9f51731d28fe88` |
+| `sdcard.img` | 514850816 | `276c9e32c3f9271d00ba1677fc554fc95f7d82e0c99fa11f6880bc47f0f199d5` |
+| `rootfs.squashfs` | 111075328 | `f3b6a28b132a4212daf131e55d6cc2a4ca553f9a85458157ad2e2326ed9f5bba` |
+| `data.ext4` | 268435456 | `69f1f0d15641e94ef3a7581e8a139e2a7870b510c8f5f743add57de7bd658cae` |
+| `boot.vfat` | 134217728 | `3638751556eb935e3b2cd47de15d8727070f83d32830c536113510e0be129da0` |
 | `Image` (kernel) | 24496640 | inside `boot.vfat` |
 
 Pinning fixes versions, not bytes: a rebuild elsewhere is not expected to
@@ -56,10 +56,24 @@ reproduce these digests.
 - The image carries no updater tools: only what the packages and the overlay
   install.
 
-Two earlier failures, both fixed in this tree, are still what makes this build
-work: `python-gobject` built without pycairo, which Onboard's cairo bridge needs,
-and `host-dconf` installed its systemd unit outside the host prefix. The Pi 4
-port itself built to exit 0 with no new failures.
+Two build-time failures, both fixed in this tree, are still what makes this
+build work: `python-gobject` built without pycairo, which Onboard's cairo bridge
+needs, and `host-dconf` installed its systemd unit outside the host prefix. The
+Pi 4 port itself built to exit 0 with no new failures.
+
+The first boot on the Pi 4 then failed in two ways, both fixed afterwards and
+both re-checked against the image's own binaries:
+
+- `igrf-x11-session.service` exited 1: the launcher called `/bin/su`, which this
+  image has only as a busybox applet that rejects the `-s`/`-c` form. The
+  launcher now drops root with util-linux `setpriv` (`--reuid`, `--regid`,
+  `--init-groups`), and `board/igrf/raspberrypi4/busybox.fragment` disables the
+  busybox `setpriv` applet, which would otherwise shadow the real binary at
+  install time and accepts no `--reuid`.
+- `sshd.service` exited 1 *after* its key script succeeded: OpenSSH exits without
+  a privilege-separation user, and `systemd-sysusers` cannot add one to a
+  read-only root. `users.txt` now creates `sshd` at image build time, and the
+  unit drop-in sets `RuntimeDirectory=sshd` for the directory sshd also needs.
 
 ## Not verified
 
