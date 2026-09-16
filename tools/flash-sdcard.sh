@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
 # Write the built Raspberry Pi 4 kiosk image to the card and read it back.
 # Run as root:  sudo bash ~/backups/flash-sdcard.sh
-# It overwrites /dev/sda only. The card currently holds the 15:01 Pi 4 build;
-# this one additionally seeds Display.TopInset, the panel's 120 px touch dead
-# band, at first boot. The original prototype contents stay in
+# It overwrites /dev/sda only. The card currently holds the 15:13 Pi 4 build
+# (TopInset seeding); this one adds -nocursor so the touch panel never shows a
+# mouse pointer. The original prototype contents stay in
 # ~/backups/igrf-prototype-card-20260915-1519.img.
 set -u
 
 IMG=/home/noobmaster/work/IGRF-RUST/buildroot/output/images/sdcard.img
 IMG_SIZE=520093696
-IMG_SHA=6f74635479880ba6e8c81d320302324191867a2f3db5b7b59ff66e348bcdf896
+IMG_SHA=c70c877574a2133b33f97c3cf4b346c04220d40c0a199ccda36a918a81cbdde9
 CARD=/dev/sda
 CARD_SIZE=63864569856
 DEST=/home/noobmaster/backups
@@ -17,7 +17,10 @@ MDIR=/home/noobmaster/work/IGRF-RUST/buildroot/output/host/bin/mdir
 REPORT="$DEST/flash-pi4-report-$(date +%Y%m%d-%H%M).txt"
 
 log() { echo "$*" | tee -a "$REPORT"; }
-fail() { log "FAIL: $*"; exit 1; }
+fail() {
+  log "FAIL: $*"
+  exit 1
+}
 
 [ "$(id -u)" = 0 ] || fail "run this as root: sudo bash $0"
 

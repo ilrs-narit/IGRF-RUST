@@ -66,7 +66,10 @@ start=18432, size=16384, type=83
     template, config = work / "example.json", work / "SystemConfig.json"
     template.write_text('{"example": true}')
     seed.seed(template, config, os.getuid(), os.getgid())
-    assert json.loads(config.read_text()) == {"example": True, "Display": {"Mode": "Fullscreen"}}
+    assert json.loads(config.read_text()) == {
+        "example": True,
+        "Display": {"Mode": "Fullscreen", "TopInset": 120.0},
+    }
     assert config.stat().st_mode & 0o777 == 0o600
     config.write_text("damaged but must be preserved")
     seed.seed(template, config, os.getuid(), os.getgid())

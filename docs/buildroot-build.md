@@ -1,5 +1,26 @@
 # Buildroot kiosk build (#26)
 
+## Images from CI
+
+Every push to `master` runs the `image` job in
+`.github/workflows/release.yml`. It builds the Pi 4 image from that checkout
+using the pinned Buildroot commit and caches source downloads only; the build
+output is recreated for each run. The release waits for both application
+builds and the image job to succeed.
+
+Download `igrf-pi4-sdcard.img.gz` and its `.sha256` file from the GitHub Release
+(or the `package-pi4-image` workflow artifact, retained for seven days).
+Verify and decompress them in the same directory:
+
+```sh
+sha256sum -c igrf-pi4-sdcard.img.gz.sha256
+gzip -dk igrf-pi4-sdcard.img.gz
+```
+
+Select the resulting `.img` when flashing the card yourself. CI never flashes
+a device. Back up the card first: writing the full image replaces its data
+partition too. A successful build does not establish hardware acceptance.
+
 ## Recorded build
 
 A full cross-build has been run on Arch Linux (x86_64, 14 CPUs, rsync 3.5.0,

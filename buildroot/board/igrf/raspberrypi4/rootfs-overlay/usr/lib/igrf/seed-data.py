@@ -16,6 +16,7 @@ def seed(source, destination, uid, gid):
         with os.fdopen(fd, "wb") as output:
             config = json.loads(Path(source).read_text())
             config.setdefault("Display", {})["Mode"] = "Fullscreen"
+            config.setdefault("Display", {})["TopInset"] = 120.0
             output.write((json.dumps(config, indent=2) + "\n").encode())
             os.fchown(output.fileno(), uid, gid)
             output.flush()

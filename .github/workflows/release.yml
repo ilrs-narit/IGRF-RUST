@@ -78,8 +78,76 @@ jobs:
             dist/${{ steps.package.outputs.package }}.sha256
           retention-days: 1
 
+  image:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 360
+    permissions:
+      contents: read
+    env:
+      BUILDROOT_COMMIT: d5180309b1b66ef3b8eaccca70ad69be8e0729a1
+      BR2_DL_DIR: ${{ github.workspace }}/buildroot/dl
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Prepare Buildroot host
+        run: |
+          # These unused SDKs belong to this disposable hosted runner.
+          sudo rm -rf /usr/local/lib/android /usr/share/dotnet /opt/ghc
+          sudo apt-get update
+          sudo apt-get install -y build-essential bc bison flex cpio rsync file \
+            unzip wget git python3 libncurses-dev libssl-dev xz-utils fdisk e2fsprogs
+          df -h .
+
+      - name: Check board and data hooks
+        run: |
+          python3 tools/test-buildroot-board.py
+          python3 tools/test-buildroot-data.py
+
+      - name: Checkout pinned Buildroot
+        run: |
+          git init buildroot-src
+          git -C buildroot-src remote add origin https://gitlab.com/buildroot.org/buildroot.git
+          git -C buildroot-src fetch --depth=1 origin "$BUILDROOT_COMMIT"
+          git -C buildroot-src checkout --detach FETCH_HEAD
+          test "$(git -C buildroot-src rev-parse HEAD)" = "$BUILDROOT_COMMIT"
+
+      - name: Cache source downloads
+        uses: actions/cache@v4
+        with:
+          path: buildroot/dl
+          key: buildroot-dl-${{ runner.os }}-${{ env.BUILDROOT_COMMIT }}-${{ hashFiles('buildroot/**', 'Cargo.lock') }}
+          restore-keys: |
+            buildroot-dl-${{ runner.os }}-${{ env.BUILDROOT_COMMIT }}-
+
+      - name: Build Pi 4 SD image
+        run: |
+          make -C buildroot-src O="$GITHUB_WORKSPACE/buildroot/output" \
+            BR2_EXTERNAL="$GITHUB_WORKSPACE/buildroot" igrf_raspberrypi4_defconfig
+          make -C buildroot-src O="$GITHUB_WORKSPACE/buildroot/output" \
+            BR2_EXTERNAL="$GITHUB_WORKSPACE/buildroot" BR2_JLEVEL="$(nproc)"
+
+      - name: Package SD image
+        run: |
+          test -s buildroot/output/images/sdcard.img
+          mkdir -p dist
+          gzip -c buildroot/output/images/sdcard.img > dist/igrf-pi4-sdcard.img.gz
+          gzip -t dist/igrf-pi4-sdcard.img.gz
+          cd dist
+          sha256sum igrf-pi4-sdcard.img.gz > igrf-pi4-sdcard.img.gz.sha256
+          sha256sum -c igrf-pi4-sdcard.img.gz.sha256
+
+      - name: Upload SD image
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-pi4-image
+          path: dist/igrf-pi4-sdcard.img.gz*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7
+
   release:
-    needs: build
+    needs: [build, image]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
