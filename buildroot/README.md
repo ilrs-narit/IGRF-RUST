@@ -46,6 +46,7 @@ board/igrf/raspberrypi4/
   config_4_64bit.txt, cmdline_4.txt  Raspberry Pi firmware config
   rootfs-overlay/                 files baked into the root filesystem
 package/                          igrf-app, onboard and its missing deps
+patches/xserver_xorg-server/      modesetting driver's missing libgbm link
 ```
 
 ## Not verified
@@ -55,8 +56,9 @@ produced `sdcard.img`, and the image hashes, partition layout and the checks run
 on them are recorded in [`docs/buildroot-build.md`](../docs/buildroot-build.md)
 (an earlier Raspberry Pi 5 build was superseded by
 [ADR 0003](../docs/adr/0003-pi4-kiosk-platform.md) before it was ever booted).
-The first card booted to a console but not to the kiosk session; the two causes
-found are fixed in this tree and recorded in the build doc. Nothing about
+The first card booted to a console but not to the kiosk session, and the second
+boot reached the X server and failed there; the causes found in both boots are
+fixed in this tree and recorded in the build doc. Nothing about
 boot-time behaviour is proven until
 [`docs/buildroot-test-plan.md`](../docs/buildroot-test-plan.md) P1 and later
 pass on hardware.

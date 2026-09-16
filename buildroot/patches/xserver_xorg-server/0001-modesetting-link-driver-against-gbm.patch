@@ -1,0 +1,45 @@
+From: IGRF kiosk tree <igrf-kiosk@invalid>
+Date: Tue, 16 Sep 2026 11:30:00 +0700
+Subject: [PATCH] modesetting: link the driver against libgbm
+
+drmmode_display.c calls gbm_bo_get_plane_count() and the other
+gbm_bo_get_*() accessors when the build has gbm with modifiers support
+(GBM_BO_WITH_MODIFIERS, probed for gbm >= 17.1.0). The meson build lists
+gbm_dep among the dependencies of the module, but the autotools build
+never adds $(GBM_LIBS) to modesetting_drv_la_LIBADD.
+
+modesetting_drv.so is a loadable module, so linking succeeds with those
+symbols undefined and the server only notices when it dlopens the
+driver:
+
+    Failed to load modesetting_drv.so:
+      undefined symbol: gbm_bo_get_plane_count
+    No drivers available
+    Fatal server error: no screens found
+
+Add $(GBM_LIBS) to the driver's LIBADD so the module carries the
+dependency itself, matching what the meson build already does.
+
+Makefile.in is patched alongside Makefile.am because this tree builds
+with the configure script shipped in the release tarball, so automake
+never regenerates it from Makefile.am.
+
+--- a/hw/xfree86/drivers/modesetting/Makefile.am
++++ b/hw/xfree86/drivers/modesetting/Makefile.am
+@@ -42,6 +42,6 @@
+ modesetting_drv_la_LTLIBRARIES = modesetting_drv.la
+ modesetting_drv_la_LDFLAGS = -module -avoid-version
+-modesetting_drv_la_LIBADD = $(UDEV_LIBS) $(DRM_LIBS)
++modesetting_drv_la_LIBADD = $(UDEV_LIBS) $(DRM_LIBS) $(GBM_LIBS)
+ modesetting_drv_ladir = @moduledir@/drivers
+ 
+ modesetting_drv_la_SOURCES = \
+--- a/hw/xfree86/drivers/modesetting/Makefile.in
++++ b/hw/xfree86/drivers/modesetting/Makefile.in
+@@ -637,5 +637,5 @@
+ modesetting_drv_la_LTLIBRARIES = modesetting_drv.la
+ modesetting_drv_la_LDFLAGS = -module -avoid-version
+-modesetting_drv_la_LIBADD = $(UDEV_LIBS) $(DRM_LIBS)
++modesetting_drv_la_LIBADD = $(UDEV_LIBS) $(DRM_LIBS) $(GBM_LIBS)
+ modesetting_drv_ladir = @moduledir@/drivers
+ modesetting_drv_la_SOURCES = \

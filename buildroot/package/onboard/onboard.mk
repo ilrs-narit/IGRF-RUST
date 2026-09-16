@@ -43,8 +43,33 @@ define ONBOARD_STAGE_PYCAIRO
 endef
 PYTHON_PYCAIRO_POST_INSTALL_TARGET_HOOKS += ONBOARD_STAGE_PYCAIRO
 
+# Upstream's custom install command resolves data_files against a prefix that
+# comes out as "/" in this cross build, so share/onboard, the GSettings schema,
+# the D-Bus service file and the locale/sound data all land in /share. Merge
+# them into /usr/share, which is where Onboard looks.
+#
+# The schema XML also has to reach the staging directory: libglib2 compiles the
+# target's schema database at finalization from the staging schemas alone (and
+# deletes the XML files from the target first), so a schema that never reaches
+# staging is silently absent from the database and GSettings then rejects it at
+# runtime.
+define ONBOARD_FIX_SHARE_PREFIX
+	if [ -d $(TARGET_DIR)/share ]; then \
+		cp -a $(TARGET_DIR)/share/. $(TARGET_DIR)/usr/share/; \
+		rm -rf $(TARGET_DIR)/share; \
+	fi
+	mkdir -p $(STAGING_DIR)/usr/share/glib-2.0/schemas
+	for f in $(TARGET_DIR)/usr/share/glib-2.0/schemas/*.gschema.xml; do \
+		[ -f "$$f" ] || continue; \
+		cp -a "$$f" $(STAGING_DIR)/usr/share/glib-2.0/schemas/; \
+	done
+endef
+ONBOARD_POST_INSTALL_TARGET_HOOKS += ONBOARD_FIX_SHARE_PREFIX
+
 # Compile the system database on the host: /etc is read-only on the target.
 # Overlay copying follows finalize hooks, so read its source directory directly.
+# The schema database itself is compiled centrally by libglib2 at finalization,
+# from the staging schemas that ONBOARD_FIX_SHARE_PREFIX feeds.
 define ONBOARD_COMPILE_DEFAULTS
 	mkdir -p $(TARGET_DIR)/etc/dconf/db
 	$(HOST_DIR)/bin/dconf compile $(TARGET_DIR)/etc/dconf/db/local \
