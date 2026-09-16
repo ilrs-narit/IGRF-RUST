@@ -132,6 +132,14 @@ impl IgrfApp {
                     .range(0..=16),
             );
         });
+        ui.horizontal(|ui| {
+            ui.label("Top inset (px)");
+            ui.add(
+                egui::DragValue::new(&mut self.config.display.top_inset)
+                    .speed(1.0)
+                    .range(0.0..=400.0),
+            );
+        });
         ui.label(
             egui::RichText::new(
                 "Fullscreen with a UI scale above 1.0 suits an embedded 1024x600 touchscreen. \

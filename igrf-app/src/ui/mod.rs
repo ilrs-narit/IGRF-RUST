@@ -56,6 +56,7 @@ impl eframe::App for IgrfApp {
         self.poll_io();
         self.run_pid();
         self.tick_satellite_tracking();
+        self.osk.set_visible(ctx.text_edit_focused());
         if ctx.input(|input| input.key_pressed(egui::Key::F11)) {
             self.fullscreen = !self.fullscreen;
             if self.fullscreen {
@@ -75,11 +76,43 @@ impl eframe::App for IgrfApp {
     }
 
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        let top_inset = self.config.display.top_inset.max(0.0);
+        if top_inset > 0.0 {
+            egui::Panel::top("readout")
+                .exact_size(top_inset)
+                .show(ui, |ui| self.show_readout(ui));
+        }
         egui::Panel::top("tab-strip").show(ui, |ui| {
             self.show_tab_strip(ui);
         });
         egui::Panel::bottom("status").show(ui, |ui| {
             ui.horizontal_wrapped(|ui| {
+                if top_inset == 0.0 {
+                    status_pill(
+                        ui,
+                        "Sensor",
+                        if !self.sensor_manager.is_open() {
+                            LinkState::Off
+                        } else if self.sensor_manager.parser().is_sensor_ready()
+                            && !sensor_is_stale(self.sensor_age())
+                        {
+                            LinkState::On
+                        } else {
+                            LinkState::Wait
+                        },
+                    );
+                    status_pill(
+                        ui,
+                        "Controller",
+                        LinkState::from_open(self.controller_manager.is_open()),
+                    );
+                    status_pill(
+                        ui,
+                        "Magson",
+                        LinkState::from_open(self.magson_client.is_open()),
+                    );
+                    status_pill(ui, "CSV", LinkState::from_open(self.logger.is_some()));
+                }
                 ui.label(format!("Status: {}", self.status));
                 if let Some(error) = &self.error {
                     ui.colored_label(Color32::LIGHT_RED, format!("Error: {error}"));
@@ -91,11 +124,6 @@ impl eframe::App for IgrfApp {
         });
         match self.active_tab {
             AppTab::Control => {
-                egui::Panel::top("top-bar").show(ui, |ui| {
-                    ui.add_space(2.0);
-                    self.show_top_bar(ui);
-                    ui.add_space(2.0);
-                });
                 egui::CentralPanel::default().show(ui, |ui| {
                     self.show_control_columns(ui);
                 });

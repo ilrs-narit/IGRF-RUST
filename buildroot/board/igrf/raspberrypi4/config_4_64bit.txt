@@ -1,0 +1,16 @@
+# Pi 4 firmware pair, from the upstream base
+# (buildroot 2026.08 board/raspberrypi4-64/config_4_64bit.txt): the Pi 4
+# boot ROM loads start4.elf/fixup4.dat from the boot partition.
+start_file=start4.elf
+fixup_file=fixup4.dat
+
+kernel=Image
+arm_64bit=1
+disable_overscan=1
+dtoverlay=vc4-kms-v3d
+disable_fw_kms_setup=1
+enable_uart=0
+
+# Provisional HDMI-A-1 mode is in cmdline_4.txt (installed as cmdline.txt on
+# the boot partition). The 1024x600 panel model, connector, refresh rate and
+# USB touch driver still need hardware testing.

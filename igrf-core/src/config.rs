@@ -236,6 +236,10 @@ fn default_ui_scale() -> f32 {
     1.0
 }
 
+fn default_top_inset() -> f32 {
+    0.0
+}
+
 /// Presentation settings for the main window.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DisplaySettings {
@@ -248,6 +252,12 @@ pub struct DisplaySettings {
     pub ui_scale: f32,
     #[serde(rename = "FullscreenMonitor", default)]
     pub fullscreen_monitor: usize,
+    /// Blank space reserved above the tab strip, in pixels. Some embedded
+    /// panels have a touch digitizer whose sensing area stops short of the top
+    /// edge, so the top of the screen cannot be tapped at all; this pushes the
+    /// interactive widgets below that dead band. 0.0 on a desktop display.
+    #[serde(rename = "TopInset", default = "default_top_inset")]
+    pub top_inset: f32,
 }
 
 impl Default for DisplaySettings {
@@ -256,6 +266,7 @@ impl Default for DisplaySettings {
             mode: default_display_mode(),
             ui_scale: default_ui_scale(),
             fullscreen_monitor: 0,
+            top_inset: default_top_inset(),
         }
     }
 }
@@ -442,6 +453,9 @@ impl AppConfig {
         }
         if !self.display.ui_scale.is_finite() || !(0.5..=3.0).contains(&self.display.ui_scale) {
             self.display.ui_scale = default_ui_scale();
+        }
+        if !self.display.top_inset.is_finite() || !(0.0..=400.0).contains(&self.display.top_inset) {
+            self.display.top_inset = default_top_inset();
         }
         clamped
     }

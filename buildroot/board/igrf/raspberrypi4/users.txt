@@ -1,0 +1,5 @@
+# Pre-create identities while /etc is writable during image assembly.
+# The root is a read-only squashfs, so systemd-sysusers cannot add users at
+# boot: sshd exits without its privilege-separation user.
+igrf 1000 igrf 1000 ! /data/igrf /usr/sbin/nologin video,render,dialout IGRF kiosk
+sshd 22 sshd 22 ! /var/empty /usr/sbin/nologin

@@ -135,26 +135,27 @@ impl IgrfApp {
         }
     }
 
-    /// One X/Y/Z card: live readout on top, PID gains below. Always visible so
+    /// One X/Y/Z summary with tuning in a separate Details window. Always visible so
     /// nothing that can stop an axis hides behind navigation.
     pub(crate) fn axis_column(&mut self, ui: &mut egui::Ui, axis: usize) {
         let label = AXES[axis];
         let target = self.slew.target();
         let mut command = None;
         let mut pause = false;
+        let details_id = egui::Id::new(("axis-details", axis));
+        let mut details_open = ui
+            .ctx()
+            .data_mut(|data| data.get_temp::<bool>(details_id).unwrap_or(false));
         ui.group(|ui| {
-            ui.set_min_width(ui.available_width().max(0.0));
-            ui.spacing_mut().item_spacing.y = 1.0;
-            ui.spacing_mut().interact_size.y = 16.0;
-            ui.spacing_mut().button_padding = egui::vec2(4.0, 1.0);
-            for font in ui.style_mut().text_styles.values_mut() {
-                font.size *= 0.8;
-            }
+            ui.spacing_mut().item_spacing.y = 2.0;
             let running = self.pid_running[axis];
             ui.horizontal(|ui| {
                 status_pill(ui, &format!("Axis {label}"), LinkState::from_open(running));
                 if ui
-                    .small_button(if running { "Pause" } else { "Start" })
+                    .add_sized(
+                        [68.0, 44.0],
+                        egui::Button::new(if running { "Pause" } else { "Start" }),
+                    )
                     .clicked()
                 {
                     self.pid_running[axis] = !running;
@@ -162,8 +163,11 @@ impl IgrfApp {
                         pause = true;
                     }
                 }
-                if ui.small_button("Reset").clicked() {
-                    self.reset_axis(axis);
+                if ui
+                    .add_sized([64.0, 44.0], egui::Button::new("Details"))
+                    .clicked()
+                {
+                    details_open = !details_open;
                 }
             });
 
@@ -182,23 +186,11 @@ impl IgrfApp {
                         .strong(),
                 );
                 ui.label(egui::RichText::new("nT").small());
-                ui.separator();
-                ui.label(format!("set {:+.3}", self.pid_settings[axis].setpoint));
-                if self.pid_settings[axis].setpoint == 0.0 {
-                    ui.label(format!("err {error:+.3}"));
-                } else {
-                    ui.colored_label(
-                        error_color(error_percent),
-                        format!("err {error:+.3} ({error_percent:.2}%)"),
-                    );
-                }
+                ui.label(format!("set {:+.1}", self.pid_settings[axis].setpoint));
             });
-            ui.label(
-                egui::RichText::new(format!(
-                    "raw {:+.3}   cal {:+.3}",
-                    self.raw[axis], self.calibrated[axis]
-                ))
-                .weak(),
+            ui.colored_label(
+                error_color(error_percent),
+                format!("err {error:+.2} ({error_percent:.2}%)"),
             );
 
             let fraction = output_fraction(
@@ -220,75 +212,97 @@ impl IgrfApp {
                 bar = bar.fill(STOP_RED);
             }
             ui.add(bar);
-
-            // Tuning laid out in three columns so all three axis cards still
-            // fit a 1024x600 screen without a dropdown.
-            ui.separator();
-            let ceiling = FIRMWARE_MAX_OUTPUT[axis];
-            ui.columns(3, |cols| {
-                egui::Grid::new(format!("pid-grid-{axis}"))
-                    .num_columns(2)
-                    .striped(true)
-                    .show(&mut cols[0], |ui| {
-                        for (name, value) in [
-                            ("Kp", &mut self.pid_settings[axis].kp),
-                            ("Ki", &mut self.pid_settings[axis].ki),
-                            ("Kd", &mut self.pid_settings[axis].kd),
-                        ] {
-                            ui.label(name);
-                            ui.add(egui::DragValue::new(value).speed(0.1));
-                            ui.end_row();
-                        }
-                    });
-
-                egui::Grid::new(format!("out-grid-{axis}"))
-                    .num_columns(2)
-                    .striped(true)
-                    .show(&mut cols[1], |ui| {
-                        ui.label("Setpoint");
-                        let mut commanded = target[axis];
-                        if ui
-                            .add(egui::DragValue::new(&mut commanded).speed(1.0))
-                            .changed()
-                        {
-                            let mut field = target;
-                            field[axis] = commanded;
-                            command = Some(field);
-                        }
-                        ui.end_row();
-                        ui.label("Min out");
-                        ui.add(
-                            egui::DragValue::new(&mut self.pid_settings[axis].min_output)
-                                .speed(1.0)
-                                .range(-ceiling..=0.0),
-                        );
-                        ui.end_row();
-                        ui.label("Max out")
-                            .on_hover_text(format!("firmware ceiling {ceiling:.0}"));
-                        ui.add(
-                            egui::DragValue::new(&mut self.pid_settings[axis].max_output)
-                                .speed(1.0)
-                                .range(0.0..=ceiling),
-                        );
-                        ui.end_row();
-                    });
-
-                egui::Grid::new(format!("filter-grid-{axis}"))
-                    .num_columns(2)
-                    .striped(true)
-                    .show(&mut cols[2], |ui| {
-                        for (name, value, speed) in [
-                            ("Q proc", &mut self.filter_settings[axis].q, 0.05),
-                            ("R meas", &mut self.filter_settings[axis].r, 1.0),
-                            ("Spike", &mut self.filter_settings[axis].spike_nt, 50.0),
-                        ] {
-                            ui.label(name);
-                            ui.add(egui::DragValue::new(value).speed(speed).range(1e-6..=1e9));
-                            ui.end_row();
-                        }
-                    });
-            });
         });
+        let ctx = ui.ctx().clone();
+        let top = ui
+            .max_rect()
+            .top()
+            .max(self.config.display.top_inset + 80.0);
+        let bounds = egui::Rect::from_min_max(egui::pos2(0.0, top), ctx.content_rect().max);
+        egui::Window::new(format!("Axis {label} · Details"))
+            .id(details_id)
+            .open(&mut details_open)
+            .collapsible(false)
+            .default_width(560.0)
+            .constrain_to(bounds)
+            .vscroll(true)
+            .show(&ctx, |ui| {
+                ui.label(format!(
+                    "Raw {:+.3} · Calibrated {:+.3} nT",
+                    self.raw[axis], self.calibrated[axis]
+                ));
+                if ui
+                    .add_sized([100.0, 44.0], egui::Button::new("Reset axis"))
+                    .clicked()
+                {
+                    self.reset_axis(axis);
+                }
+                let ceiling = FIRMWARE_MAX_OUTPUT[axis];
+                ui.columns(3, |cols| {
+                    egui::Grid::new(format!("pid-grid-{axis}"))
+                        .num_columns(2)
+                        .striped(true)
+                        .show(&mut cols[0], |ui| {
+                            for (name, value) in [
+                                ("Kp", &mut self.pid_settings[axis].kp),
+                                ("Ki", &mut self.pid_settings[axis].ki),
+                                ("Kd", &mut self.pid_settings[axis].kd),
+                            ] {
+                                ui.label(name);
+                                ui.add(egui::DragValue::new(value).speed(0.1));
+                                ui.end_row();
+                            }
+                        });
+
+                    egui::Grid::new(format!("out-grid-{axis}"))
+                        .num_columns(2)
+                        .striped(true)
+                        .show(&mut cols[1], |ui| {
+                            ui.label("Setpoint");
+                            let mut commanded = target[axis];
+                            if ui
+                                .add(egui::DragValue::new(&mut commanded).speed(1.0))
+                                .changed()
+                            {
+                                let mut field = target;
+                                field[axis] = commanded;
+                                command = Some(field);
+                            }
+                            ui.end_row();
+                            ui.label("Min out");
+                            ui.add(
+                                egui::DragValue::new(&mut self.pid_settings[axis].min_output)
+                                    .speed(1.0)
+                                    .range(-ceiling..=0.0),
+                            );
+                            ui.end_row();
+                            ui.label("Max out")
+                                .on_hover_text(format!("firmware ceiling {ceiling:.0}"));
+                            ui.add(
+                                egui::DragValue::new(&mut self.pid_settings[axis].max_output)
+                                    .speed(1.0)
+                                    .range(0.0..=ceiling),
+                            );
+                            ui.end_row();
+                        });
+
+                    egui::Grid::new(format!("filter-grid-{axis}"))
+                        .num_columns(2)
+                        .striped(true)
+                        .show(&mut cols[2], |ui| {
+                            for (name, value, speed) in [
+                                ("Q proc", &mut self.filter_settings[axis].q, 0.05),
+                                ("R meas", &mut self.filter_settings[axis].r, 1.0),
+                                ("Spike", &mut self.filter_settings[axis].spike_nt, 50.0),
+                            ] {
+                                ui.label(name);
+                                ui.add(egui::DragValue::new(value).speed(speed).range(1e-6..=1e9));
+                                ui.end_row();
+                            }
+                        });
+                });
+            });
+        ctx.data_mut(|data| data.insert_temp(details_id, details_open));
         if pause {
             // Pausing one axis stops that axis' PID, but the controller holds
             // whatever it was last sent for all three. Push a packet now with
@@ -327,12 +341,10 @@ impl IgrfApp {
         }
 
         let budget = ui.available_height().clamp(320.0, 900.0);
-        let plot_h = ((budget - 22.0 - 3.0 * 16.0) / 3.0).clamp(70.0, 190.0);
-        let cage_h = (budget - 20.0 - 2.0 * (plot_h + 16.0)).clamp(110.0, 240.0);
+        let plot_h = ((budget - 90.0) / 3.0).clamp(60.0, 190.0);
+        let cage_h = (budget - 80.0 - 2.0 * (plot_h + 16.0)).clamp(140.0, 240.0);
 
         ui.columns(3, |columns| {
-            self.show_magson_strip(&mut columns[0]);
-            columns[0].separator();
             for axis in 0..3 {
                 self.axis_column(&mut columns[0], axis);
                 columns[0].add_space(2.0);
@@ -344,8 +356,10 @@ impl IgrfApp {
             }
 
             self.show_cage(&mut columns[2], cage_h);
-            self.magnitude_plot(&mut columns[2], plot_h);
-            self.magson_plot(&mut columns[2], plot_h);
+            let right_plot_h = ((columns[2].available_height() - 88.0) / 2.0).max(35.0);
+            self.magnitude_plot(&mut columns[2], right_plot_h);
+            self.magson_plot(&mut columns[2], right_plot_h);
+            self.show_magson_strip(&mut columns[2]);
         });
     }
 

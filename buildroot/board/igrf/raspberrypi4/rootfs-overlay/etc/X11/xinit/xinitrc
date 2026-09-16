@@ -1,0 +1,25 @@
+#!/bin/sh
+set -eu
+export DISPLAY=:0
+export GDK_BACKEND=x11
+export HOME=/data/igrf
+export XAUTHORITY=/run/igrf-x11/Xauthority
+export DBUS_SESSION_BUS_ADDRESS=unix:path=/run/igrf-x11/bus
+
+# Both Onboard and the independent app service use this same fixed bus.
+dbus-daemon --session --address="$DBUS_SESSION_BUS_ADDRESS" --fork
+
+# XDG autostart. matchbox is only a window manager and executes no autostart
+# entries itself, so run them here. Only plain Exec= lines are honoured - the
+# one entry in this image (/etc/xdg/autostart/onboard.desktop) needs nothing
+# more, and GDK_BACKEND above keeps Onboard an X11 client.
+for desktop in /etc/xdg/autostart/*.desktop; do
+    [ -e "$desktop" ] || continue
+    cmd=$(sed -n 's/^Exec=//p' "$desktop" | head -n 1)
+    [ -n "$cmd" ] && $cmd &
+done
+
+matchbox-window-manager -use_titlebar no &
+wm_pid=$!
+systemd-notify --ready
+wait "$wm_pid"

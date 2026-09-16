@@ -1,0 +1,19 @@
+From: IGRF maintainers
+Subject: [PATCH] Respect staged installs when compiling schemas
+
+Wheel building performs an install into a staging root; defer schema
+compilation to Buildroot host-libglib2 finalization instead.
+
+Upstream: Not submitted
+
+--- a/setup.py
++++ b/setup.py
+@@ -440,7 +440,7 @@
+         install.run(self)
+ 
+         # Only run this if NOT inside a fakeroot environment
+-        if not os.getenv("FAKEROOTKEY"):
++        if not self.root and not os.getenv("FAKEROOTKEY"):
+             print("Running tools/gen_gschema.py...")
+             
+ 

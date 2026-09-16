@@ -1,0 +1,12 @@
+# Provision administrator public keys in /data/ssh/authorized_keys (0600).
+HostKey /data/ssh/ssh_host_ed25519_key
+AuthorizedKeysFile /data/ssh/authorized_keys
+PermitRootLogin prohibit-password
+AllowUsers root
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitEmptyPasswords no
+UsePAM no
+X11Forwarding no
+AllowTcpForwarding no
+Subsystem sftp internal-sftp

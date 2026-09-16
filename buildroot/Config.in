@@ -1,0 +1,10 @@
+menu "IGRF kiosk packages"
+
+source "$BR2_EXTERNAL_IGRF_PATH/package/igrf-app/Config.in"
+source "$BR2_EXTERNAL_IGRF_PATH/package/onboard/Config.in"
+source "$BR2_EXTERNAL_IGRF_PATH/package/python-distutils-extra/Config.in"
+source "$BR2_EXTERNAL_IGRF_PATH/package/dconf/Config.in"
+source "$BR2_EXTERNAL_IGRF_PATH/package/hunspell/Config.in"
+source "$BR2_EXTERNAL_IGRF_PATH/package/iso-codes/Config.in"
+
+endmenu

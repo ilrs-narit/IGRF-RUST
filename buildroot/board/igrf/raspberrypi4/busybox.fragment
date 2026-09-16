@@ -1,0 +1,5 @@
+# Disable the busybox setpriv applet: it only handles capabilities and
+# rejects --reuid, while the kiosk session launcher needs util-linux's setpriv
+# to drop root to igrf. busybox installs its applet links after util-linux, so
+# leaving this applet enabled would shadow the real binary.
+# CONFIG_SETPRIV is not set
