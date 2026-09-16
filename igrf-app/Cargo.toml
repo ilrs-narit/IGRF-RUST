@@ -20,7 +20,9 @@ chrono = { version = "0.4", default-features = false, features = [
 egui_plot = "0.37.0"
 igrf-core = { path = "../igrf-core" }
 igrf-io = { path = "../igrf-io" }
-rfd = "0.17"
+# rfd is declared per-target below: the Buildroot kiosk image has neither
+# zenity nor xdg-desktop-portal, so Linux uses rfd's GTK3 backend while
+# Windows (and macOS) keep the default native dialogs.
 serialport = "4.9"
 dotenvy = "0.15"
 
@@ -38,3 +40,14 @@ eframe = { version = "0.36.1", default-features = false, features = [
 # feature gates the extension trait used for that; defaults are off so this
 # does not pull winit's Wayland client-side-decoration renderer.
 winit = { version = "0.30", default-features = false, features = ["x11"] }
+
+# Enabling the gtk3 feature makes rfd compile its xdg-portal backend out
+# entirely (its `not(feature = "gtk3")` cfg), so the dialog works on the kiosk
+# image without any portal service. default-features = false keeps the
+# portal/wayland crates out of the image. gtk-sys needs GTK3 >= 3.24 via
+# pkg-config at build time.
+[target.'cfg(target_os = "linux")'.dependencies]
+rfd = { version = "0.17", default-features = false, features = ["gtk3"] }
+
+[target.'cfg(not(target_os = "linux"))'.dependencies]
+rfd = { version = "0.17" }

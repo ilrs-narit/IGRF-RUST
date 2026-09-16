@@ -1,0 +1,5 @@
+# เปลี่ยนแพลตฟอร์ม kiosk เป็น Raspberry Pi 4
+
+ฮาร์ดแวร์ต้นแบบที่มีอยู่จริงคือ Raspberry Pi 4 Model B (rev `d03114`) และไม่มีเครื่อง Raspberry Pi 5 ให้ทดสอบ จึงย้ายแพลตฟอร์มเป้าหมายของ kiosk image จาก Pi 5 ตาม [ADR 0002](0002-buildroot-kiosk-platform.md) มาเป็น Raspberry Pi 4 (BCM2711): ใช้ `raspberrypi4_64` ของ upstream เป็นฐาน — Cortex-A72, kernel `bcm2711`, firmware `start4.elf`/`fixup4.dat` บน boot partition — และเหลือ defconfig เดียวสำหรับบอร์ดนี้ ข้อกำหนดอื่นของ 0002 (Buildroot แบบ BR2_EXTERNAL, systemd, X11 กับ Onboard, NetworkManager และ OS อ่านอย่างเดียวกับข้อมูลแยกตาม [ADR 0001](0001-read-only-os-separate-persistent-data.md)) ไม่เปลี่ยน
+
+ทางเลือกที่ตัดออก: คงเป้าหมาย Pi 5 ไว้ทั้งที่ไม่มีฮาร์ดแวร์ให้ทดสอบ (image สร้างได้แต่พิสูจน์บนบอร์ดไม่ได้ และ image Pi 5 บูตบน Pi 4 ไม่ได้เพราะ firmware, DTB และชุดคำสั่งต่างกัน) และดูแลสอง defconfig พร้อมกัน (config ที่ไม่มีใครทดสอบจะเน่าเงียบ ๆ) ผลที่ตามมา: binary ที่คอมไพล์สำหรับ Cortex-A76 ใช้บน Cortex-A72 ไม่ได้ ต้อง build ใหม่ทั้งระบบ และหลักฐานชุด Pi 5 ที่บันทึกไว้ก่อนหน้า ([build](../buildroot-build.md)) เก็บไว้เป็นประวัติ ไม่ใช่สถานะปัจจุบัน
