@@ -169,8 +169,26 @@ jobs:
           # already did the real work.
           version="$(grep -m1 '^version' igrf-app/Cargo.toml | sed -E 's/version *= *"([^"]+)"/\1/')"
           tag="v${version}-master.${GITHUB_RUN_ID}"
+          download="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${tag}"
+          printf '%s\n' \
+            '## Raspberry Pi 4 SD image' \
+            'Complete bootable kiosk image with the IGRF app; download it below to flash your SD card.' \
+            '' \
+            "- [Download Pi 4 image (.img.gz)](${download}/igrf-pi4-sdcard.img.gz)" \
+            "- [Download SHA-256 checksum](${download}/igrf-pi4-sdcard.img.gz.sha256)" \
+            '' \
+            'Save both files in the same directory, then verify and decompress:' \
+            '```sh' \
+            'sha256sum -c igrf-pi4-sdcard.img.gz.sha256' \
+            'gzip -dk igrf-pi4-sdcard.img.gz' \
+            '```' \
+            'Back up your SD card, then select the extracted .img in your flashing tool. Flashing replaces all data on the card.' \
+            '' \
+            'Standalone Linux application archives are also available under Assets.' \
+            > "$RUNNER_TEMP/release-notes.md"
           gh release create "${tag}" \
             --target "$GITHUB_SHA" \
             --title "IGRF ${tag}" \
+            --notes-file "$RUNNER_TEMP/release-notes.md" \
             --generate-notes \
             dist/*
