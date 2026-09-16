@@ -50,11 +50,11 @@ package/                          igrf-app, onboard and its missing deps
 
 ## Not verified
 
-The tree was **built once for the earlier Raspberry Pi 5 configuration**; that
-build was superseded by [ADR 0003](../docs/adr/0003-pi4-kiosk-platform.md) and
-never booted. Its image hashes, partition layout and the checks run on them are
-recorded in [`docs/buildroot-build.md`](../docs/buildroot-build.md). The
-Raspberry Pi 4 configuration has **not been built or booted yet**, so nothing
-about boot-time behaviour is proven until
+The tree **has been built for the Raspberry Pi 4**: a full cross-build on x86_64
+produced `sdcard.img`, and the image hashes, partition layout and the checks run
+on them are recorded in [`docs/buildroot-build.md`](../docs/buildroot-build.md)
+(an earlier Raspberry Pi 5 build was superseded by
+[ADR 0003](../docs/adr/0003-pi4-kiosk-platform.md) before it was ever booted).
+It has **not been booted**: nothing about boot-time behaviour is proven until
 [`docs/buildroot-test-plan.md`](../docs/buildroot-test-plan.md) P1 and later
 pass on hardware.

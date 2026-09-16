@@ -2,13 +2,6 @@
 
 ## Recorded build
 
-**Superseded by [ADR 0003](adr/0003-pi4-kiosk-platform.md):** the build recorded
-in this section is the earlier Raspberry Pi 5 configuration, which the prototype
-hardware cannot run and which was never booted. It is kept as history until the
-Raspberry Pi 4 build replaces it; the same checks apply to that build, with the
-Pi 4 firmware (`start4.elf`, `fixup4.dat`, `bootcode.bin`) now expected in
-`boot.vfat`.
-
 A full cross-build has been run on Arch Linux (x86_64, 14 CPUs, rsync 3.5.0,
 wget 1.25.0, bc 1.08.2) against the pinned commit below, with the command in
 "Commands" (`-j14`, no `local.mk`), and it completed: `sdcard.img` (491 MiB)
@@ -16,12 +9,19 @@ came out of `buildroot/output/images/`. Hashes of that build, partition layout,
 image contents and the checks run against them are recorded
 [below](#what-was-checked-on-that-build).
 
+The host session interrupted the build twice and it resumed from its own stamps
+(three `make` invocations appear in the log); the recorded images come from the
+last invocation, which exited 0. Resuming is safe at package boundaries, but the
+interruption is part of the record, not something a reproduction should copy.
+Earlier Raspberry Pi 5 records remain in this file's git history.
+
 | Image | Bytes | SHA-256 |
 | --- | --- | --- |
-| `sdcard.img` | 514850816 | `cab0caef27f6d8ae5a973d403876f74211b580a762f893fdff587703a2793bb3` |
-| `rootfs.squashfs` | 111083520 | `6d49b2850b2c8f65eb31a72cb9c451a9936459d4812e9101e314b002c4b63d7c` |
-| `data.ext4` | 268435456 | `adf5d610bde6fd8731b62f34027faf251f952a4f0849c6aac28e9d60e0dda274` |
-| `boot.vfat` | 134217728 | `bc08109fb0afa3c03132545e9d225e11c87f540db37627327d60c2e5ec0f1120` |
+| `sdcard.img` | 514850816 | `c9e946c4525eccb89005f3f38370aa38cf0e186a23566c55c5c4bfb9dd8db676` |
+| `rootfs.squashfs` | 110968832 | `9595e3096c60012110ee256bfc7b75faabb15552d3c4b39d0a2d68b21fdd0672` |
+| `data.ext4` | 268435456 | `a2f40f1a25798369f3a525af1c2518c19a316e62b222353b2ca342523e281fa0` |
+| `boot.vfat` | 134217728 | `403537093c4286548c2d67747cd35b271ebeb3501c22477e6f9f51731d28fe88` |
+| `Image` (kernel) | 24496640 | inside `boot.vfat` |
 
 Pinning fixes versions, not bytes: a rebuild elsewhere is not expected to
 reproduce these digests.
@@ -31,25 +31,35 @@ reproduce these digests.
 - Partitions (`sfdisk`): 2048-264191 FAT32 bootable (128 MiB), 264192-481279
   Linux rootfs (106 MiB), 481280-1005567 Linux data (256 MiB); disk identifier
   `0x49475246`.
-- `rootfs.squashfs`: SquashFS 4.0 (zlib), 10413 inodes, 10927 entries listed
-  with Buildroot's own `unsquashfs`. It contains `usr/bin/igrf-app` (aarch64
-  ELF, 13800224 bytes), `usr/bin/onboard`, the `gi/_gi_cairo` bridge,
-  `usr/lib/systemd/system/igrf-app.service` (`User=igrf`), the `/usr/lib/igrf/`
-  helpers, `SystemConfig.example.json`, `etc/X11/xinit/xinitrc` and the compiled
-  dconf database.
-- `/etc/passwd` in the image carries `igrf:x:1000:1000:...`. The users table is
+- `boot.vfat`: `Image` (24496640 bytes), `bcm2711-rpi-4-b.dtb` and the `-400`,
+  `-cm4`, `-cm4s` device trees, **`start4.elf` (2303232 bytes) and `fixup4.dat`
+  (5498 bytes)** — the firmware pair the Pi 4 boot ROM loads, which the earlier
+  Pi 5 image deliberately did not carry — plus `config.txt` (533 bytes),
+  `cmdline.txt` (137 bytes) and `overlays/` (358 dtbo files). `config.txt` and
+  `cmdline.txt` in the image are byte-identical to the board files in this tree.
+- `rootfs.squashfs`: SquashFS 4.0, gzip, 10410 inodes, 10924 entries listed with
+  Buildroot's own `unsquashfs`. It contains `usr/bin/igrf-app`,
+  `usr/bin/onboard`, the `gi/_gi_cairo` bridge, `igrf-app.service` with its
+  `data.conf` drop-in, the `/usr/lib/igrf/` helpers, `SystemConfig.example.json`,
+  `etc/X11/xinit/xinitrc` and the compiled dconf database. No `__pycache__` under
+  `/usr/lib/igrf`; the only bytecode caches are Python's own standard-library
+  ones.
+- `/etc/passwd` in the image carries
+  `igrf:x:1000:1000:IGRF kiosk:/data/igrf:/usr/sbin/nologin`. The users table is
   applied through the per-filesystem fakeroot script, so the identity is in the
   image and deliberately not in `output/target`.
 - `data.ext4`: `e2fsck -fn` clean, label `data`, 12 files, and byte-identical to
   partition 3 of `sdcard.img` (`cmp` over the full 256 MiB).
-- All 83 defconfig symbols are present in the resolved `.config`, and the Bootlin
-  toolchain tarball's SHA-256 matches the pinned `.hash`.
+- All 81 symbols of `igrf_raspberrypi4_defconfig` are present in the resolved
+  `.config`, and the Bootlin toolchain tarball's SHA-256 matches the pinned
+  `.hash`.
 - The image carries no updater tools: only what the packages and the overlay
   install.
 
-Two failures were hit and fixed while producing it, both in this tree:
-`python-gobject` built without pycairo, which Onboard's cairo bridge needs, and
-`host-dconf` installed its systemd unit outside the host prefix.
+Two earlier failures, both fixed in this tree, are still what makes this build
+work: `python-gobject` built without pycairo, which Onboard's cairo bridge needs,
+and `host-dconf` installed its systemd unit outside the host prefix. The Pi 4
+port itself built to exit 0 with no new failures.
 
 ## Not verified
 
