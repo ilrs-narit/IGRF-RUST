@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Onboard (on-screen keyboard)
+Comment=X11 on-screen keyboard for the touch panel; started with the kiosk session
+# GDK_BACKEND=x11 is forced by the session environment (/etc/X11/xinit/xinitrc):
+# Onboard types through XTEST and must never become a Wayland client.
+Exec=onboard
+X-GNOME-Autostart-enabled=true
+# NOTE: Onboard's persistent settings (docking, layout, theme) are NOT set
+# here or at runtime — the rootfs is read-only. They come from the dconf
+# system database in etc/dconf/**, owned by issue #20.

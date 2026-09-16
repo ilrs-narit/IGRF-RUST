@@ -1,0 +1,17 @@
+# Keys verified against Onboard 1.4.4-1 data/org.onboard.gschema.xml.
+# The application controls visibility over D-Bus; egui has no AT-SPI focus.
+[org/onboard]
+start-minimized=true
+
+[org/onboard/auto-show]
+enabled=false
+
+[org/onboard/window]
+docking-enabled=true
+docking-edge='bottom'
+docking-shrink-workarea=false
+
+[org/onboard/window/landscape]
+dock-width=1024
+dock-height=260
+dock-expand=true

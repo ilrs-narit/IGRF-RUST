@@ -1,0 +1,11 @@
+[Unit]
+Description=Prepare IGRF persistent state
+RequiresMountsFor=/data
+Requires=systemd-sysusers.service
+After=systemd-sysusers.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemd-tmpfiles --create /etc/tmpfiles.d/igrf.conf
+ExecStart=/usr/bin/python3 /usr/lib/igrf/seed-data.py
+RemainAfterExit=yes

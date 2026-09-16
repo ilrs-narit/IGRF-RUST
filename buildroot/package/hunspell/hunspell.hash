@@ -1,0 +1,5 @@
+# Locally computed from the pinned source download and extracted license files.
+sha256  69fa312d3586c988789266eaf7ffc9861d9f6396c31fc930a014d551b59bbd6e  hunspell-1.7.2.tar.gz
+sha256  640d90f6ee401241ff62834d0d1b33f83049e99b8bfdfa04ed1b0a1635dde3e7  COPYING
+sha256  7c6699c75f87b52bdc542db26d6b1b92892577cda46e20eceb79e2790a1c291b  COPYING.LESSER
+sha256  53692a2ed6c6a2c6ec9b32dd0b820dfae91e0a1fcdf625ca9ed0bdf8705fcc4f  COPYING.MPL
