@@ -6,7 +6,7 @@
 
 - เป้าหมาย: เปิดเครื่องเข้า IGRF-RUST ทันที และสร้าง OS image ซ้ำจากเวอร์ชันที่กำหนดได้
 - รุ่นแรก: เครื่องต้นแบบในห้องทดลอง เพื่อทดสอบหน้าจอและอุปกรณ์จริง
-- ฮาร์ดแวร์: Raspberry Pi 5 กับจอสัมผัส 1024×600
+- ฮาร์ดแวร์: Raspberry Pi 4 (BCM2711) กับจอสัมผัส 1024×600 — เปลี่ยนจาก Pi 5 ตาม [ADR 0003](adr/0003-pi4-kiosk-platform.md)
 - การต่อจอ: HDMI สำหรับภาพ และ USB สำหรับสัมผัส; ยังไม่ระบุรุ่นจอ
 - สื่อบูตเครื่องต้นแบบ: microSD เพื่อเขียน image และสลับการ์ดทดสอบได้ง่าย
 - ความจุ microSD สำหรับต้นแบบ: 32 GB หรือมากกว่า; ยังไม่สรุปขนาดพาร์ทิชันจนกว่าจะประเมินขนาดระบบจริง
@@ -73,21 +73,21 @@
 | --- | --- | --- |
 | Buildroot release | หน้า download ระบุ stable 2026.08 และ LTS 2025.02.x; เสนอประเมิน 2026.08 สำหรับต้นแบบก่อน | ยังไม่ตรึง release: อ่านไฟล์จาก tag 2026.08 ผ่านเว็บไม่สำเร็จ จึงห้ามนำค่าจาก master ไปอ้างว่าเป็นค่าของ release |
 | Rust | Cargo.lock ใช้ eframe 0.36.1; manifest ของ crate ที่ติดตั้งไว้กำหนด Rust 1.95 ส่วน Buildroot master ที่ตรวจระบุ Rust 1.97.1 | รุ่น compiler ใน release ที่ตรึงต้องผ่าน MSRV ของ dependencies ทั้งชุด และ cross-build สำเร็จ; การเทียบเวอร์ชันอย่างเดียวไม่ยืนยัน compatibility |
-| Pi 5 | upstream มี raspberrypi5_defconfig แบบ aarch64/Cortex-A76 และ glibc พร้อม kernel bcm2712 และขั้นตอนสร้าง image | เป็นฐานบูต ไม่ใช่ kiosk image สำเร็จรูป; ต้องเพิ่มกราฟิก Wi-Fi input และพื้นที่ข้อมูล แล้วทดสอบบนบอร์ดจริง |
+| Pi 4 | upstream มี raspberrypi4_64_defconfig แบบ aarch64/Cortex-A72 และ glibc พร้อม kernel bcm2711 และขั้นตอนสร้าง image | เป็นฐานบูต ไม่ใช่ kiosk image สำเร็จรูป; ต้องเพิ่มกราฟิก Wi-Fi input และพื้นที่ข้อมูล แล้วทดสอบบนบอร์ดจริง |
 | NetworkManager | มีแพ็กเกจและตัวเลือก nmcli ใน upstream; โค้ดเดิมเรียก nmcli สำหรับ Ethernet | เพิ่ม Wi-Fi UI, firmware/driver/supplicant ที่ตรงบอร์ด และ persistence ของ profiles; ให้ NetworkManager เป็นผู้จัดการอินเทอร์เฟซ ไม่เปิด DHCP จากฐาน defconfig แข่งกัน |
 | Onboard | ไม่พบ Onboard ในเมนูแพ็กเกจ target ของ upstream master ที่ตรวจ; upstream Onboard มี native extensions และต้องใช้ Python/GTK3/GObject introspection/D-Bus รวมถึงเครื่องมือ build DistUtilsExtra | เตรียมแพ็กเกจใน BR2_EXTERNAL โดยตรึง revision ก่อนสรุป dependencies; ต้อง cross-build และทดสอบ typelibs, schemas, layouts, โฟกัสสัมผัส และคำสั่งแสดง/ซ่อนผ่าน D-Bus |
 | ตัวเลือกไฟล์ | rfd 0.17.2 ใช้ portal และ fallback เป็น zenity ซึ่งไม่พบในเมนูแพ็กเกจที่ตรวจ แต่มี feature gtk3 | เสนอเปลี่ยน dependency เฉพาะ Linux เป็น backend gtk3 เพื่อใช้ชุด GTK3 ร่วมกับ Onboard; ต้องตรวจ compile และ file dialog จริง โดยคงแพลตฟอร์มอื่น |
 | USB/ข้อมูลถาวร | แอปเดิมแสดงไดรฟ์ที่ mount แล้ว แต่ไม่ได้จัดการ mount/eject; ฐานข้อมูลใช้ WAL | เลือกบริการ mount/eject ที่มีอยู่ก่อนเขียนเอง ทดสอบสิทธิ์, flush/unmount, USB หลุด และสำรองฐานข้อมูลอย่างสอดคล้องกัน |
 | จอ | ยืนยันเพียง HDMI + USB touch, 1024×600 | รอรุ่นจอและเครื่องจริงเพื่อยืนยันโหมดภาพ ไดรเวอร์ และพิกัดสัมผัส |
 
-แหล่ง upstream ที่ตรวจ: [รายการ release](https://buildroot.org/download.html), [Rust package บน master](https://gitlab.com/buildroot.org/buildroot/-/raw/master/package/rust-bin/rust-bin.mk), [Pi 5 defconfig บน master](https://gitlab.com/buildroot.org/buildroot/-/raw/master/configs/raspberrypi5_defconfig), [NetworkManager options](https://gitlab.com/buildroot.org/buildroot/-/raw/master/package/network-manager/Config.in), [คู่มือ BR2_EXTERNAL และ Cargo packages](https://buildroot.org/downloads/manual/manual.html)
+แหล่ง upstream ที่ตรวจ: [รายการ release](https://buildroot.org/download.html), [Rust package บน master](https://gitlab.com/buildroot.org/buildroot/-/raw/master/package/rust-bin/rust-bin.mk), [Pi 4 defconfig บน master](https://gitlab.com/buildroot.org/buildroot/-/raw/master/configs/raspberrypi4_64_defconfig), [NetworkManager options](https://gitlab.com/buildroot.org/buildroot/-/raw/master/package/network-manager/Config.in), [คู่มือ BR2_EXTERNAL และ Cargo packages](https://buildroot.org/downloads/manual/manual.html)
 
 หลักฐานชุดหน้าจอ: [เมนูแพ็กเกจ Buildroot](https://raw.githubusercontent.com/buildroot/buildroot/master/package/Config.in), [Onboard setup](https://github.com/onboard-osk/onboard/blob/main/setup.py), [Onboard dependencies](https://raw.githubusercontent.com/onboard-osk/onboard/main/debian/control), [rfd 0.17.2 features](https://raw.githubusercontent.com/PolyMeilex/rfd/0.17.2/Cargo.toml) การไม่พบในเมนูที่ตรวจไม่ใช่ข้อยืนยันว่าไม่มี recipe ภายนอก และซอร์สบน master/main ยังไม่ใช่ revision ที่ตรึงสำหรับ image
 
 ## ลำดับพิสูจน์แบบก่อนสร้าง image เต็ม
 
 1. ตรวจซอร์สของ release ที่จะตรึงและ dependencies ของ toolchain/Onboard ให้ครบ พร้อม hash ของแหล่งที่มา
-2. ทดลอง build และเปิด X11 + Onboard + แอป + file dialog บน Pi 5 โดยยังไม่จ่ายกำลังขดลวด ก่อนเพิ่มความสามารถใหม่ทั้งหมด
+2. ทดลอง build และเปิด X11 + Onboard + แอป + file dialog บน Pi 4 โดยยังไม่จ่ายกำลังขดลวด ก่อนเพิ่มความสามารถใหม่ทั้งหมด
 3. เชื่อมพื้นที่ข้อมูลถาวรและสิทธิ์ของบริการ แล้วเพิ่ม Wi-Fi เวลา USB และการจัดการ logs ตามข้อกำหนด
 4. ทดสอบการกู้คืนและความขัดข้อง ก่อนเริ่มทดสอบต่อเนื่อง 72 ชั่วโมงและ 30 วัน
 

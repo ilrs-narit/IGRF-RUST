@@ -2,6 +2,13 @@
 
 ## Recorded build
 
+**Superseded by [ADR 0003](adr/0003-pi4-kiosk-platform.md):** the build recorded
+in this section is the earlier Raspberry Pi 5 configuration, which the prototype
+hardware cannot run and which was never booted. It is kept as history until the
+Raspberry Pi 4 build replaces it; the same checks apply to that build, with the
+Pi 4 firmware (`start4.elf`, `fixup4.dat`, `bootcode.bin`) now expected in
+`boot.vfat`.
+
 A full cross-build has been run on Arch Linux (x86_64, 14 CPUs, rsync 3.5.0,
 wget 1.25.0, bc 1.08.2) against the pinned commit below, with the command in
 "Commands" (`-j14`, no `local.mk`), and it completed: `sdcard.img` (491 MiB)
@@ -46,7 +53,8 @@ Two failures were hit and fixed while producing it, both in this tree:
 
 ## Not verified
 
-No Raspberry Pi 5 boot has been run, so the HDMI/USB panel model, touch edges,
+No Raspberry Pi 4 boot has been run — the superseded Pi 5 image was never booted
+either — so the HDMI/USB panel model, touch edges,
 display mode, Wi-Fi firmware, boot time and the `/data` grow path are unproven,
 as is Onboard's show/hide ownership (P1.3). The
 [hardware test plan](buildroot-test-plan.md) still has no passing hardware
@@ -92,7 +100,7 @@ git clone https://gitlab.com/buildroot.org/buildroot.git buildroot-src
 git -C buildroot-src checkout --detach d5180309b1b66ef3b8eaccca70ad69be8e0729a1
 make -C buildroot-src O="$IGRF_REPO/buildroot/output" \
   BR2_EXTERNAL="$IGRF_REPO/buildroot" BR2_DL_DIR="$IGRF_REPO/buildroot/dl" \
-  igrf_raspberrypi5_defconfig
+  igrf_raspberrypi4_defconfig
 printf 'IGRF_APP_OVERRIDE_SRCDIR = %s\n' "$IGRF_REPO" > buildroot/output/local.mk
 make -C buildroot-src O="$IGRF_REPO/buildroot/output" \
   BR2_EXTERNAL="$IGRF_REPO/buildroot" BR2_DL_DIR="$IGRF_REPO/buildroot/dl"
