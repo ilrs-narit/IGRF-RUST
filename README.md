@@ -255,15 +255,19 @@ why matching the Pi's glibc in this local image isn't practical.
 
 ## Automatic GitHub releases
 
-Every push to `master` runs the checks and creates a GitHub Release containing
-two Linux binaries (`x86_64` and `aarch64`, each with its SHA-256 file). The
+Every push to `master` and every pull request runs formatting, workspace tests,
+and board/data hook checks without building a Buildroot image.
+
+Push a `v*` tag to build and publish a GitHub Release containing the Pi 4 SD
+image and two Linux binaries (`x86_64` and `aarch64`), with SHA-256 checksums.
+The Actions **Run workflow** button builds the same artifacts without publishing
+a release. Image builds use a fresh output directory and cache only downloads;
+there is no nightly schedule. The
 `aarch64` build runs natively on a GitHub-hosted arm64 runner - no cross
 toolchain - and targets 64-bit Raspberry Pi OS (Bookworm or newer; Pi 5
-doesn't support the 32-bit or Bullseye images). Tags use
-`v<igrf-app-version>-master.<run-id>`; for example, `v0.1.0-master.123456789`.
+doesn't support the 32-bit or Bullseye images).
 
-Change the version in `igrf-app/Cargo.toml` when you want the next release
-line, then push to `main`.
+Update the version in `igrf-app/Cargo.toml` before creating the matching release tag.
 
 ## Release versioning
 
@@ -304,14 +308,11 @@ its WMM2025 calculation differ from `v0.1.0` by roughly 4 nT, because the
 expansion now uses the model's own 6371.2 km reference radius; logs from the
 two releases are not directly comparable.
 
-Merging to `master` publishes the release: `.github/workflows/release.yml`
-builds the tag from the `igrf-app` version in `Cargo.toml`, so that version has
-to move before the merge or two releases claim the same one.
-
-To tag by hand instead:
+Merging to `master` runs CI. To publish a release, create and push a tag matching
+the version in `igrf-app/Cargo.toml`:
 
 ```bash
-git tag -a v0.4.1 -m "Release v0.4.1"
+git tag -a v0.5.0 -m "Release v0.5.0"
 git push origin master --follow-tags
 ```
 

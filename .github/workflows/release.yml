@@ -1,11 +1,14 @@
-name: Release
+name: CI and Release
 
 on:
   push:
     branches: [master]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -34,6 +37,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
+            fdisk \
             libgl1-mesa-dev \
             libgtk-3-dev \
             libudev-dev \
@@ -51,11 +55,15 @@ jobs:
         run: |
           cargo fmt --all -- --check
           cargo test --workspace
+          python3 tools/test-buildroot-board.py
+          python3 tools/test-buildroot-data.py
 
       - name: Build release binary
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
         run: cargo build --release --package igrf-app
 
       - name: Prepare release archive
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
         id: package
         shell: bash
         run: |
@@ -71,6 +79,7 @@ jobs:
           echo "package=${package}" >> "$GITHUB_OUTPUT"
 
       - name: Upload build artifact
+        if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
         uses: actions/upload-artifact@v4
         with:
           name: package-${{ matrix.arch }}
@@ -80,6 +89,7 @@ jobs:
           retention-days: 1
 
   image:
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     timeout-minutes: 360
     permissions:
@@ -149,7 +159,10 @@ jobs:
           retention-days: 7
 
   release:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
     needs: [build, image]
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -166,11 +179,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # No Rust toolchain in this job - version comes straight out of
-          # Cargo.toml instead of `cargo metadata`, since the build matrix
-          # already did the real work.
-          version="$(grep -m1 '^version' igrf-app/Cargo.toml | sed -E 's/version *= *"([^"]+)"/\1/')"
-          tag="v${version}-master.${GITHUB_RUN_ID}"
+          tag="$GITHUB_REF_NAME"
           download="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/releases/download/${tag}"
           printf '%s\n' \
             '## Raspberry Pi 4 SD image' \
