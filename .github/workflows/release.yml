@@ -116,7 +116,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: buildroot/dl
-          key: buildroot-dl-${{ runner.os }}-${{ env.BUILDROOT_COMMIT }}-${{ hashFiles('buildroot/**', 'Cargo.lock') }}
+          # Hash dependency inputs only; avoid overlay symlinks and generated dl/output trees.
+          key: buildroot-dl-${{ runner.os }}-${{ env.BUILDROOT_COMMIT }}-${{ hashFiles('buildroot/configs/**', 'buildroot/package/**', 'Cargo.lock') }}
           restore-keys: |
             buildroot-dl-${{ runner.os }}-${{ env.BUILDROOT_COMMIT }}-
 
