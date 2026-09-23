@@ -84,6 +84,89 @@ fn open_day(
     Ok((writer, path))
 }
 
+/// Whether `name` is one dated segment the logger writes
+/// (`<series>_YYYY-MM-DD.csv`), as opposed to any other file in the folder.
+fn is_dated_segment(name: &str) -> bool {
+    if name.contains(['/', '\\']) {
+        return false;
+    }
+    let Some(stem) = name.strip_suffix(".csv") else {
+        return false;
+    };
+    stem.rsplit_once('_')
+        .is_some_and(|(_, date)| NaiveDate::parse_from_str(date, "%Y-%m-%d").is_ok())
+}
+
+/// Why a log segment cannot be deleted.
+#[derive(Debug)]
+pub enum LogDeleteError {
+    /// The name is not a dated segment the logger writes.
+    NotALogSegment,
+    /// It is the segment the logger has open right now.
+    BeingLogged,
+    /// The filesystem refused the removal.
+    Io(io::Error),
+}
+
+impl std::fmt::Display for LogDeleteError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::NotALogSegment => {
+                write!(f, "not a dated log file written by the CSV logger")
+            }
+            Self::BeingLogged => {
+                write!(
+                    f,
+                    "the file being logged cannot be deleted; stop logging first"
+                )
+            }
+            Self::Io(error) => write!(f, "cannot remove the file: {error}"),
+        }
+    }
+}
+
+impl std::error::Error for LogDeleteError {}
+
+/// The path `name` would be deleted at, or why it must not be deleted at all.
+///
+/// # Errors
+/// [`LogDeleteError::NotALogSegment`] when `name` is not a dated segment, or
+/// [`LogDeleteError::BeingLogged`] when it is the file the caller reported as
+/// currently open.
+pub fn deletable_log_path(
+    directory: &Path,
+    name: &str,
+    active: Option<&Path>,
+) -> Result<PathBuf, LogDeleteError> {
+    if !is_dated_segment(name) {
+        return Err(LogDeleteError::NotALogSegment);
+    }
+    let path = directory.join(name);
+    if active == Some(path.as_path()) {
+        return Err(LogDeleteError::BeingLogged);
+    }
+    Ok(path)
+}
+
+/// Deletes one dated log segment and returns the number of bytes freed. The
+/// caller is responsible for asking the operator first: this is the one path
+/// that destroys recorded history, and it never touches a file the logger did
+/// not write or the segment being written right now.
+///
+/// # Errors
+/// As [`deletable_log_path`], plus [`LogDeleteError::Io`] when the file cannot
+/// be measured or removed.
+pub fn delete_log_segment(
+    directory: &Path,
+    name: &str,
+    active: Option<&Path>,
+) -> Result<u64, LogDeleteError> {
+    let path = deletable_log_path(directory, name, active)?;
+    let bytes = fs::metadata(&path).map_err(LogDeleteError::Io)?.len();
+    fs::remove_file(&path).map_err(LogDeleteError::Io)?;
+    Ok(bytes)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -137,6 +220,85 @@ mod tests {
         );
         assert_eq!(fs::read_to_string(&first_path).unwrap(), "a,b\n1,2\n");
         assert_eq!(fs::read_to_string(&second_path).unwrap(), "a,b\n3,4\n");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn only_dated_segments_written_by_the_logger_count_as_log_files() {
+        assert!(is_dated_segment("sensor_log_2026-09-22.csv"));
+        assert!(is_dated_segment("cage_a_2026-01-02.csv"));
+
+        for name in [
+            "sensor_log.csv",
+            "setpoint_profile.csv",
+            "sensor_log_2026-09-22.csv.bak",
+            "sensor_log_2026-09-22.txt",
+            "notes.txt",
+            "sensor_log_2026-13-01.csv",
+            "archive/sensor_log_2026-09-22.csv",
+            "archive\\sensor_log_2026-09-22.csv",
+        ] {
+            assert!(!is_dated_segment(name), "{name}");
+        }
+    }
+
+    #[test]
+    fn deleting_a_segment_removes_only_that_file_and_reports_its_size() {
+        let dir = directory("delete");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let keep = dir.join("sensor_log_2026-09-21.csv");
+        let doomed = dir.join("sensor_log_2026-09-22.csv");
+        fs::write(&keep, "a,b\n").unwrap();
+        fs::write(&doomed, "a,b\n1,2\n").unwrap();
+
+        let bytes = delete_log_segment(&dir, "sensor_log_2026-09-22.csv", None).unwrap();
+
+        assert_eq!(bytes, 8);
+        assert!(!doomed.exists());
+        assert!(keep.exists(), "another day's segment must survive");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn the_segment_being_written_is_never_deleted() {
+        let dir = directory("active-segment");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let active = dir.join("sensor_log_2026-09-22.csv");
+        fs::write(&active, "a,b\n").unwrap();
+
+        let result = delete_log_segment(&dir, "sensor_log_2026-09-22.csv", Some(&active));
+
+        assert!(matches!(result, Err(LogDeleteError::BeingLogged)));
+        assert!(active.exists(), "the open segment must survive");
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_file_the_logger_did_not_write_is_never_deleted() {
+        let dir = directory("foreign-file");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let foreign = dir.join("setpoint_profile.csv");
+        fs::write(&foreign, "time_s,bx_nt\n0,1\n").unwrap();
+
+        let result = delete_log_segment(&dir, "setpoint_profile.csv", None);
+
+        assert!(matches!(result, Err(LogDeleteError::NotALogSegment)));
+        assert!(foreign.exists());
+        let _ = fs::remove_dir_all(dir);
+    }
+
+    #[test]
+    fn a_missing_segment_reports_the_io_error() {
+        let dir = directory("missing");
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+
+        let result = delete_log_segment(&dir, "sensor_log_2026-09-22.csv", None);
+
+        assert!(matches!(result, Err(LogDeleteError::Io(_))));
         let _ = fs::remove_dir_all(dir);
     }
 

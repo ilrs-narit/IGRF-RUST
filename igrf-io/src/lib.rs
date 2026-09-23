@@ -9,7 +9,7 @@ mod spacetrack;
 mod tle_store;
 
 pub use controller::{write_controller_packet, ControllerReplyCounter, CONTROLLER_ERROR_REPLY};
-pub use csv_logger::CsvLogger;
+pub use csv_logger::{deletable_log_path, delete_log_segment, CsvLogger, LogDeleteError};
 pub use drives::{list_drives, DriveInfo};
 pub use file_copy::copy_file_with_progress;
 pub use magson::{
