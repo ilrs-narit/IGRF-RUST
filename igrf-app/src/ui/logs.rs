@@ -114,6 +114,23 @@ impl IgrfApp {
             );
         });
 
+        if let Some(copy) = &self.file_copy {
+            let fraction = if copy.total == 0 {
+                0.0
+            } else {
+                copy.copied as f32 / copy.total as f32
+            };
+            ui.add(
+                egui::ProgressBar::new(fraction)
+                    .desired_width(ui.available_width())
+                    .text(format!(
+                        "Copying {}: {} / {}",
+                        copy.name,
+                        human_size(copy.copied),
+                        human_size(copy.total)
+                    )),
+            );
+        }
         if !self.transfer_status.is_empty() {
             ui.label(egui::RichText::new(&self.transfer_status).small().weak());
         }
@@ -122,24 +139,33 @@ impl IgrfApp {
 
     /// The copy buttons in the strip between the two lists: '>>' and '<<'
     pub(crate) fn show_transfer_buttons(&mut self, ui: &mut egui::Ui) {
-        let to_logs_ready = self.ext_sel.is_some();
-        let to_drive_ready = self.log_files_sel.is_some() && self.ext_cwd.is_some();
+        let busy = self.file_copy.is_some();
+        let to_logs_ready = self.ext_sel.is_some() && !busy;
+        let to_drive_ready = self.log_files_sel.is_some() && self.ext_cwd.is_some() && !busy;
         let size = egui::vec2(40.0, 30.0);
 
         ui.add_space(96.0);
-        if ui
+        let to_drive = ui
             .add_enabled(to_drive_ready, egui::Button::new(">>").min_size(size))
-            .on_hover_text("Copy the selected log file into the open drive folder")
-            .clicked()
-        {
+            .on_disabled_hover_text("A copy is already running");
+        let to_drive = if busy {
+            to_drive
+        } else {
+            to_drive.on_hover_text("Copy the selected log file into the open drive folder")
+        };
+        if to_drive.clicked() {
             self.copy_logs_to_drive();
         }
         ui.add_space(8.0);
-        if ui
+        let to_logs = ui
             .add_enabled(to_logs_ready, egui::Button::new("<<").min_size(size))
-            .on_hover_text("Copy the selected drive file into the logs folder")
-            .clicked()
-        {
+            .on_disabled_hover_text("A copy is already running");
+        let to_logs = if busy {
+            to_logs
+        } else {
+            to_logs.on_hover_text("Copy the selected drive file into the logs folder")
+        };
+        if to_logs.clicked() {
             self.copy_drive_to_logs();
         }
     }

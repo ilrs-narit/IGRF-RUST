@@ -6,7 +6,7 @@ impl IgrfApp {
             return;
         };
         let dest = self.log_directory();
-        self.copy_into(cwd.join(name), dest);
+        self.start_file_copy(cwd.join(name), dest);
     }
 
     pub(crate) fn copy_logs_to_drive(&mut self) {
@@ -14,38 +14,7 @@ impl IgrfApp {
             return;
         };
         let source = self.log_directory().join(name);
-        self.copy_into(source, cwd);
-    }
-
-    /// Copy `source` into `dest_dir`, keeping its file name. Overwrites a file of
-    /// the same name. Both lists are rescanned afterwards so the new file shows up.
-    pub(crate) fn copy_into(&mut self, source: PathBuf, dest_dir: PathBuf) {
-        let Some(name) = source.file_name().map(|name| name.to_owned()) else {
-            self.transfer_status = "No file selected".to_owned();
-            return;
-        };
-        if let Err(error) = std::fs::create_dir_all(&dest_dir) {
-            self.transfer_status = format!("Cannot open {}: {error}", dest_dir.display());
-            return;
-        }
-        let dest = dest_dir.join(&name);
-        let replaced = dest.exists();
-        match std::fs::copy(&source, &dest) {
-            Ok(bytes) => {
-                self.transfer_status = format!(
-                    "{} {} ({}) to {}",
-                    if replaced { "Replaced" } else { "Copied" },
-                    name.to_string_lossy(),
-                    human_size(bytes),
-                    dest_dir.display()
-                );
-            }
-            Err(error) => {
-                self.transfer_status = format!("Copy failed: {error}");
-            }
-        }
-        self.refresh_log_files();
-        self.refresh_ext_files();
+        self.start_file_copy(source, cwd);
     }
 
     /// Right column: pick a connected drive from the dropdown
@@ -114,7 +83,7 @@ impl IgrfApp {
         let mut pick: Option<String> = None;
         egui::ScrollArea::vertical()
             .id_salt("ext-drive-scroll")
-            .max_height(220.0)
+            .max_height(320.0)
             .auto_shrink([false, true])
             .show(ui, |ui| {
                 egui::Grid::new("ext-drive-files")
