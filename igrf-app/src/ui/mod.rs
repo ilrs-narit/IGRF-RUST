@@ -96,7 +96,21 @@ impl eframe::App for IgrfApp {
                         "Magson",
                         LinkState::from_open(self.magson_client.is_open()),
                     );
-                    status_pill(ui, "CSV", LinkState::from_open(self.logger.is_some()));
+                    status_pill(
+                        ui,
+                        "CSV",
+                        if self.logger_fault.is_some() {
+                            LinkState::Fault
+                        } else {
+                            LinkState::from_open(self.logger.is_some())
+                        },
+                    );
+                }
+                if let Some(fault) = &self.logger_fault {
+                    ui.colored_label(Color32::LIGHT_RED, format!("CSV LOG FAILED: {fault}"));
+                    if ui.small_button("Acknowledge").clicked() {
+                        self.acknowledge_logger_fault();
+                    }
                 }
                 ui.label(format!("Status: {}", self.status));
                 if let Some(error) = &self.error {

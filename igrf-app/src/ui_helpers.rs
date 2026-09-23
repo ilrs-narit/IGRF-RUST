@@ -7,6 +7,7 @@ pub enum LinkState {
     Off,
     Wait,
     On,
+    Fault,
 }
 
 impl LinkState {
@@ -23,6 +24,7 @@ impl LinkState {
             Self::Off => Color32::from_gray(120),
             Self::Wait => Color32::from_rgb(230, 170, 60),
             Self::On => Color32::from_rgb(80, 200, 120),
+            Self::Fault => Color32::LIGHT_RED,
         }
     }
 }

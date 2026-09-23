@@ -135,7 +135,15 @@ impl IgrfApp {
                 "Magson",
                 LinkState::from_open(self.magson_client.is_open()),
             );
-            status_pill(ui, "CSV", LinkState::from_open(self.logger.is_some()));
+            status_pill(
+                ui,
+                "CSV",
+                if self.logger_fault.is_some() {
+                    LinkState::Fault
+                } else {
+                    LinkState::from_open(self.logger.is_some())
+                },
+            );
             ui.label(format!(
                 "PID {}/3",
                 self.pid_running.iter().filter(|running| **running).count()
