@@ -30,6 +30,12 @@ These are implementation defaults to test, not measured capacity guarantees:
 - Safe removal requires ending all writes, checking final sync/close, and a
   successful OS unmount. Failure must not be reported as safe removal.
 
+Deletion is manual only. The app's "Saved log files" panel can delete a dated
+log segment after its own confirmation dialog; it refuses the segment currently
+being written and deletes nothing on its own. That is not a capacity rule: an
+appliance that fills its filesystem still stops logging with an alert rather
+than freeing space.
+
 **App work still required:** `igrf-io/src/csv_logger.rs` currently rotates by
 local date and flushes rows, but does not implement the size, space, sync or
 selected-USB rules above. The application must handle logger errors with the
