@@ -211,6 +211,47 @@ one thing here that cannot be recovered later.
 The data-grow service expands partition 3 on boot. Keep coil power disconnected
 through all initial image tests and recovery work.
 
+## Systemd time epoch (SCRUM-57)
+
+systemd compiles `TIME_EPOCH` into the image as a lower bound for the system
+clock. The Pi 4 has no RTC battery, so with no network the clock starts from
+this value and the journal and log files are dated by it until timesyncd
+first syncs.
+
+systemd's meson resolves the value from the `-Dtime-epoch` option, then
+`$SOURCE_DATE_EPOCH`, then the latest git tag, then the mtime of its `NEWS`
+file. The systemd 258.7 tarball has no `.git` and neither the local build nor
+the CI image job exports `SOURCE_DATE_EPOCH`, so the build fell through to
+the `NEWS` mtime — the upstream release date 2026-03-13 — and the Pi booted
+in March 2026. `buildroot/external.mk` therefore appends
+`-Dtime-epoch=$(shell date +%s)` to `SYSTEMD_CONF_OPTS`, pinning the epoch to
+the image build time. The override lives in the external tree's makefile, so
+it covers local and CI builds alike.
+
+The tradeoff is that the image is not reproducible: the epoch changes on
+every build, so two builds of the same tree differ. `BR2_REPRODUCIBLE` stays
+off.
+
+The epoch is baked in when the systemd package is configured, so changing it
+means reconfiguring that package — delete its build directory, then rebuild;
+the same invocation regenerates `buildroot/output/images/sdcard.img`:
+
+```sh
+rm -rf buildroot/output/build/systemd-258.7
+make -C buildroot-src O="$IGRF_REPO/buildroot/output" \
+  BR2_EXTERNAL="$IGRF_REPO/buildroot" BR2_DL_DIR="$IGRF_REPO/buildroot/dl"
+```
+
+Verify the compiled value in the build tree; meson writes it to `config.h` in
+the package build directory:
+
+```sh
+grep TIME_EPOCH buildroot/output/build/systemd-258.7/buildroot-build/config.h
+```
+
+Expect `#define TIME_EPOCH <seconds>` within the build window; check it with
+`date -u -d @<seconds>`.
+
 ## Operating contracts
 
 - **Network (#22):** NetworkManager exclusively manages LAN/Wi-Fi with its
