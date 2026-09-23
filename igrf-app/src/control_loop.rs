@@ -72,9 +72,14 @@ impl IgrfApp {
             }
         }
 
+        // A latched CSV fault cancels any recorded resume intent first:
+        // acknowledging the banner later must never fire a stale resume.
+        if self.resume_pending && self.logger_fault.is_some() {
+            self.resume_pending = false;
+            self.paused_by_watchdog = [false; 3];
         // A reconnect only proves a port reopened, not that the link behind it
         // works, so every fault has to be clear before the coils are driven.
-        if self.resume_pending && fault.is_none() {
+        } else if self.resume_pending && fault.is_none() {
             self.resume_pending = false;
             self.pid_running = self.paused_by_watchdog;
             self.paused_by_watchdog = [false; 3];

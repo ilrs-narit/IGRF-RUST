@@ -4,6 +4,7 @@ use crate::history::PlotHistory;
 use crate::netcfg;
 use crate::satellite_ui::{SatSearchState, TrackedSat};
 use crate::{AppTab, IgrfApp, SetpointSource};
+use eframe::egui;
 use igrf_core::satellite::PRESETS;
 use igrf_core::{
     AppConfig, CalculationService, DisplayMode, ProcessedData, SensorService, SlewLimiter,
@@ -13,11 +14,11 @@ use std::time::Instant;
 
 impl IgrfApp {
     pub(crate) fn new(
-        _cc: &eframe::CreationContext<'_>,
+        egui_ctx: &egui::Context,
         config: AppConfig,
         config_problem: Option<String>,
     ) -> Self {
-        let mut style = (*_cc.egui_ctx.style_of(eframe::egui::Theme::Dark)).clone();
+        let mut style = (*egui_ctx.style_of(eframe::egui::Theme::Dark)).clone();
         style.visuals = eframe::egui::Visuals::dark();
         let rgb = eframe::egui::Color32::from_rgb;
         style.visuals.panel_fill = rgb(16, 21, 29);
@@ -39,8 +40,8 @@ impl IgrfApp {
             widget.corner_radius = eframe::egui::CornerRadius::same(6);
         }
         style.spacing.item_spacing = eframe::egui::vec2(8.0, 6.0);
-        _cc.egui_ctx.set_theme(eframe::egui::Theme::Dark);
-        _cc.egui_ctx.set_style_of(eframe::egui::Theme::Dark, style);
+        egui_ctx.set_theme(eframe::egui::Theme::Dark);
+        egui_ctx.set_style_of(eframe::egui::Theme::Dark, style);
         let pid_settings = [
             config.pid_x.clone(),
             config.pid_y.clone(),
@@ -147,6 +148,7 @@ impl IgrfApp {
             paused_by_watchdog: [false; 3],
             resume_pending: false,
             logger: None,
+            logger_fault: None,
 
             // Default lat/lon value in manual magnetism calculator to Chiang Mai, Thailand
             manual_lat: 18.8524,

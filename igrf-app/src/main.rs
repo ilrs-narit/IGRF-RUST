@@ -105,7 +105,7 @@ fn main() -> eframe::Result {
             // A finger on a touchscreen needs bigger touch targets; the scale
             // applies to fonts, buttons and spacing alike.
             cc.egui_ctx.set_zoom_factor(config.display.ui_scale);
-            Ok(Box::new(IgrfApp::new(cc, config, config_problem)))
+            Ok(Box::new(IgrfApp::new(&cc.egui_ctx, config, config_problem)))
         }),
     )
 }
@@ -264,6 +264,10 @@ struct IgrfApp {
     resume_pending: bool,
 
     logger: Option<CsvLogger>,
+    /// Latched CSV write/flush failure. Set by `handle_logger_failure`,
+    /// cleared only by the Acknowledge button: while it stands the bottom bar
+    /// shows the fault and the control loop refuses to auto-resume.
+    logger_fault: Option<String>,
     manual_lat: f64,
     manual_lon: f64,
     manual_result: Option<GeomagnetismResult>,
