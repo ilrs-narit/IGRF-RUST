@@ -9,7 +9,14 @@ impl IgrfApp {
         }
     }
 
-    /// Rescan the log directory for the "Saved log files" list. Read-only: a
+    /// The segment the CSV logger is writing right now, if logging is on.
+    pub(crate) fn active_log_file(&self) -> Option<PathBuf> {
+        self.logger
+            .as_ref()
+            .map(|logger| logger.path().to_path_buf())
+    }
+
+    /// Rescan the log directory for the Files tab's log list. Read-only: a
     /// missing directory is reported, not created.
     pub(crate) fn refresh_log_files(&mut self) {
         let dir = self.log_directory();
@@ -46,6 +53,20 @@ impl IgrfApp {
         if !self.ext_scanned {
             self.refresh_drives();
             self.ext_scanned = true;
+        }
+        // A date rollover moves the logger to a segment the last scan never
+        // saw; rescan so the list and the delete guard follow the file being
+        // written without waiting for a manual Refresh.
+        let directory = self.log_directory();
+        if let Some(active) = self.active_log_file() {
+            if active.parent() == Some(directory.as_path())
+                && !self
+                    .log_files
+                    .iter()
+                    .any(|row| directory.join(&row.name) == active)
+            {
+                self.refresh_log_files();
+            }
         }
         let logs_path = self.log_directory().display().to_string();
         let drive_path = self
@@ -95,6 +116,7 @@ impl IgrfApp {
         if !self.transfer_status.is_empty() {
             ui.label(egui::RichText::new(&self.transfer_status).small().weak());
         }
+        self.show_delete_confirm(ui);
     }
 
     /// The copy buttons in the strip between the two lists: '>>' and '<<'
@@ -122,11 +144,18 @@ impl IgrfApp {
     }
 
     /// Left column: ls every file in the log directory, with a Refresh to
-    /// rescan. Click a file to select it for a `>>` copy.
+    /// rescan and a Delete for the selected dated segment. Click a file to
+    /// select it for a `>>` copy or, when the guards in `igrf_io` allow it,
+    /// for deletion.
     pub(crate) fn show_logs_folder_list(&mut self, ui: &mut egui::Ui) {
-        if ui.button("Refresh").clicked() {
-            self.refresh_log_files();
-        }
+        let active = self.active_log_file();
+        let directory = self.log_directory();
+        ui.horizontal(|ui| {
+            if ui.button("Refresh").clicked() {
+                self.refresh_log_files();
+            }
+            self.show_delete_button(ui);
+        });
         ui.label(egui::RichText::new(&self.log_files_status).small().weak());
         if self.log_files.is_empty() {
             return;
@@ -143,11 +172,14 @@ impl IgrfApp {
                     .show(ui, |ui| {
                         for row in &self.log_files {
                             let selected = self.log_files_sel.as_deref() == Some(row.name.as_str());
+                            let label =
+                                if active.as_deref() == Some(directory.join(&row.name).as_path()) {
+                                    format!("{} \u{b7} logging", row.name)
+                                } else {
+                                    row.name.clone()
+                                };
                             if ui
-                                .selectable_label(
-                                    selected,
-                                    egui::RichText::new(&row.name).monospace(),
-                                )
+                                .selectable_label(selected, egui::RichText::new(label).monospace())
                                 .clicked()
                             {
                                 pick = Some(row.name.clone());

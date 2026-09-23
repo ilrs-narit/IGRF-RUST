@@ -1,5 +1,6 @@
 mod control;
 mod drives;
+mod log_delete;
 mod logs;
 mod model;
 mod satellite;

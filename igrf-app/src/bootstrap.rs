@@ -70,6 +70,7 @@ impl IgrfApp {
             log_files_status: String::new(),
             log_files_scanned: false,
             log_files_sel: None,
+            log_delete_confirm: None,
             ext_drives: Vec::new(),
             ext_drive_sel: 0,
             ext_scanned: false,

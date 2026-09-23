@@ -171,6 +171,9 @@ struct IgrfApp {
     log_files_status: String,
     log_files_scanned: bool,
     log_files_sel: Option<String>,
+    /// Name of the log segment awaiting delete confirmation, or `None` when
+    /// the confirmation dialog is closed.
+    log_delete_confirm: Option<String>,
     ext_drives: Vec<DriveInfo>,
     ext_drive_sel: usize,
     ext_scanned: bool,
