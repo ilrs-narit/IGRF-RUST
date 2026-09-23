@@ -30,6 +30,22 @@ impl LinkState {
 /// Below this the side-by-side X/Y/Z layout stacks vertically instead.
 pub const MIN_COLUMN_WIDTH: f32 = 190.0;
 
+/// Byte count as a short human string (`1.4 MB`), for the file lists.
+pub fn human_size(bytes: u64) -> String {
+    const UNITS: [&str; 4] = ["B", "KB", "MB", "GB"];
+    let mut value = bytes as f64;
+    let mut unit = 0;
+    while value >= 1024.0 && unit < UNITS.len() - 1 {
+        value /= 1024.0;
+        unit += 1;
+    }
+    if unit == 0 {
+        format!("{bytes} B")
+    } else {
+        format!("{value:.1} {}", UNITS[unit])
+    }
+}
+
 pub fn fits_columns(ui: &egui::Ui, count: usize) -> bool {
     ui.available_width() >= MIN_COLUMN_WIDTH * count as f32
 }

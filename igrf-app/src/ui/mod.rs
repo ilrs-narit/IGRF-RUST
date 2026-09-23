@@ -10,8 +10,8 @@ use crate::cage;
 use crate::control_helpers::sensor_is_stale;
 use crate::satellite_ui::{OBJECT_TYPE_CHOICES, RCS_OPTIONS};
 use crate::ui_helpers::{
-    dash_if_blank, error_color, fits_columns, output_fraction, port_selector, show_plot,
-    status_pill, LinkState,
+    dash_if_blank, error_color, fits_columns, human_size, output_fraction, port_selector,
+    show_plot, status_pill, LinkState,
 };
 use crate::{
     AppTab, FileRow, IgrfApp, SetpointSource, AXES, CONTOUR_LINE_COLOR, SATELLITE_COLORS, STOP_RED,
@@ -32,22 +32,6 @@ fn prune_selection(selected: &mut Option<String>, rows: &[FileRow]) {
         if !rows.iter().any(|row| !row.is_dir && &row.name == name) {
             *selected = None;
         }
-    }
-}
-
-/// Byte count as a short human string (`1.4 MB`), for the log file list.
-fn human_size(bytes: u64) -> String {
-    const UNITS: [&str; 4] = ["B", "KB", "MB", "GB"];
-    let mut value = bytes as f64;
-    let mut unit = 0;
-    while value >= 1024.0 && unit < UNITS.len() - 1 {
-        value /= 1024.0;
-        unit += 1;
-    }
-    if unit == 0 {
-        format!("{bytes} B")
-    } else {
-        format!("{value:.1} {}", UNITS[unit])
     }
 }
 
