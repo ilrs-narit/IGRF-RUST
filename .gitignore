@@ -25,6 +25,7 @@ __pycache__/
 /buildroot/dl/
 /buildroot/.config
 /buildroot/.config.old
+/buildroot/*.log
 /buildroot/local.mk
 
 .agents/
