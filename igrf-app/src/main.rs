@@ -132,13 +132,15 @@ impl SetpointSource {
     }
 }
 
-/// Separated UI Tab IGRF Control and IGRF Model
+/// Separated UI tabs: IGRF Control, IGRF Model, Settings and the log / drive
+/// file manager.
 #[derive(Clone, Copy, PartialEq, Eq, Default)]
 enum AppTab {
     #[default]
     Control,
     Model,
     Settings,
+    Files,
 }
 
 impl AppTab {
@@ -147,6 +149,7 @@ impl AppTab {
             Self::Control => "IGRF Control",
             Self::Model => "IGRF Model",
             Self::Settings => "Settings",
+            Self::Files => "Files",
         }
     }
 }

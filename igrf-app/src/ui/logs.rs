@@ -45,7 +45,8 @@ impl IgrfApp {
         }
     }
 
-    // Show log files panel: left column is the logs folder, right column is the external drive
+    // Files tab: left column is the logs folder, right column is the external
+    // drive, and the strip between them moves files across.
     pub(crate) fn show_log_files_panel(&mut self, ui: &mut egui::Ui) {
         if !self.log_files_scanned {
             self.refresh_log_files();
@@ -163,7 +164,7 @@ impl IgrfApp {
         let mut pick: Option<String> = None;
         egui::ScrollArea::vertical()
             .id_salt("logs-folder-scroll")
-            .max_height(220.0)
+            .max_height(320.0)
             .auto_shrink([false, true])
             .show(ui, |ui| {
                 egui::Grid::new("saved-log-files")

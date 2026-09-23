@@ -157,13 +157,17 @@ impl eframe::App for IgrfApp {
                                         egui::CollapsingHeader::new("Config / logging")
                                             .default_open(true)
                                             .show(ui, |ui| self.show_config_panel(ui));
-                                        egui::CollapsingHeader::new("Saved log files")
-                                            .default_open(false)
-                                            .show(ui, |ui| self.show_log_files_panel(ui));
                                     },
                                 );
                             });
                         });
+                });
+            }
+            AppTab::Files => {
+                egui::CentralPanel::default().show(ui, |ui| {
+                    egui::ScrollArea::vertical()
+                        .auto_shrink([false; 2])
+                        .show(ui, |ui| self.show_log_files_panel(ui));
                 });
             }
             AppTab::Model => {

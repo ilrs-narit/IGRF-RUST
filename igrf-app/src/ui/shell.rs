@@ -12,8 +12,13 @@ fn navigation(ui: &mut egui::Ui, active: &mut AppTab) -> Option<ShellAction> {
     ui.add_space(4.0);
     ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 8.0;
-        let tab_width = ((ui.available_width() - 388.0) / 3.0).clamp(100.0, 172.0);
-        for tab in [AppTab::Control, AppTab::Model, AppTab::Settings] {
+        let tab_width = ((ui.available_width() - 388.0) / 4.0).clamp(100.0, 172.0);
+        for tab in [
+            AppTab::Control,
+            AppTab::Model,
+            AppTab::Settings,
+            AppTab::Files,
+        ] {
             let selected = *active == tab;
             let text = egui::RichText::new(tab.label())
                 .strong()
@@ -175,9 +180,10 @@ mod tests {
             };
             frame(vec![]);
             for (x, expected_tab, expected_action) in [
-                (260.0, AppTab::Model, None),
-                (440.0, AppTab::Settings, None),
-                (940.0, AppTab::Settings, Some(ShellAction::Stop)),
+                (240.0, AppTab::Model, None),
+                (410.0, AppTab::Settings, None),
+                (580.0, AppTab::Files, None),
+                (940.0, AppTab::Files, Some(ShellAction::Stop)),
                 (80.0, AppTab::Control, None),
                 (940.0, AppTab::Control, Some(ShellAction::Stop)),
             ] {
