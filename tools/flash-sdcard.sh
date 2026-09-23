@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 # Write the built Raspberry Pi 4 kiosk image to the card and read it back.
 # Run as root:  sudo bash ~/backups/flash-sdcard.sh
-# It overwrites /dev/sda only. This build (2026-09-22 16:25) is the dev tree
-# plus the uncommitted working tree: Files tab, copy progress bar, guarded
-# manual log-segment delete, and the log-policy note. The card's previous
-# /data (config, SSH/Wi-Fi keys, 682 MB of March-dated logs) is overwritten
-# without a backup by operator decision.
+# It overwrites /dev/sda only. This build (2026-09-23 09:53) is dev@68d0497:
+# the Files tab with copy progress and guarded manual log-segment delete, the
+# CSV-failure stop and latched alert (SCRUM-46), and systemd TIME_EPOCH pinned
+# to the build time (1790131937, 2026-09-23 02:52 UTC) so an offline boot no
+# longer lands in March 2026 (SCRUM-57). The card's existing /data (config,
+# SSH/Wi-Fi keys, logs) is overwritten without a backup by operator decision.
 set -u
 
 IMG=/home/noobmaster/work/IGRF-RUST/buildroot/output/images/sdcard.img
 IMG_SIZE=520093696
-IMG_SHA=073d0546a107d08e2ddd8cb2b26c4f621f297e2ac727bb8797831ade11057602
+IMG_SHA=bcfc8ed1cadd6cd0167e59c073db01c2dbc0505b7225f016ef181d06baea2677
 CARD=/dev/sda
 CARD_SIZE=63864569856
 DEST=/home/noobmaster/backups
