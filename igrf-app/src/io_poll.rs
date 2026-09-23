@@ -9,6 +9,7 @@ impl IgrfApp {
     pub(crate) fn poll_io(&mut self) {
         self.poll_lan_task();
         self.poll_type_fetch();
+        self.poll_file_copy();
         self.apply_filter_settings();
         self.apply_calibration();
         self.maybe_reconnect_sensor();

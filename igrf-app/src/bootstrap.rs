@@ -78,6 +78,7 @@ impl IgrfApp {
             ext_status: String::new(),
             ext_sel: None,
             transfer_status: String::new(),
+            file_copy: None,
             available_ports,
             lan_profiles: netcfg::list_wired().unwrap_or_default(),
             lan_selected: 0,

@@ -13,11 +13,13 @@ mod osk;
 mod satellite_tracking;
 mod satellite_ui;
 mod setpoint;
+mod transfer;
 mod ui;
 mod ui_helpers;
 
 use history::PlotHistory;
 use satellite_ui::{SatSearchState, TrackedSat};
+use transfer::FileCopy;
 
 use eframe::egui::{self, Color32};
 use igrf_core::geomagnetism::GeomagnetismResult;
@@ -177,6 +179,8 @@ struct IgrfApp {
     ext_status: String,
     ext_sel: Option<String>,
     transfer_status: String,
+    /// The copy currently running between the logs folder and a drive, if any.
+    file_copy: Option<FileCopy>,
     available_ports: Vec<String>,
     lan_profiles: Vec<netcfg::LanProfile>,
     lan_selected: usize,
