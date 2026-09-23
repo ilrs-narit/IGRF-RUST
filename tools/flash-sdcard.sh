@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
 # Write the built Raspberry Pi 4 kiosk image to the card and read it back.
 # Run as root:  sudo bash ~/backups/flash-sdcard.sh
-# It overwrites /dev/sda only. The card currently holds the 15:13 Pi 4 build
-# (TopInset seeding); this one adds -nocursor so the touch panel never shows a
-# mouse pointer. The original prototype contents stay in
-# ~/backups/igrf-prototype-card-20260915-1519.img.
+# It overwrites /dev/sda only. This build (2026-09-22 16:25) is the dev tree
+# plus the uncommitted working tree: Files tab, copy progress bar, guarded
+# manual log-segment delete, and the log-policy note. The card's previous
+# /data (config, SSH/Wi-Fi keys, 682 MB of March-dated logs) is overwritten
+# without a backup by operator decision.
 set -u
 
 IMG=/home/noobmaster/work/IGRF-RUST/buildroot/output/images/sdcard.img
 IMG_SIZE=520093696
-IMG_SHA=c70c877574a2133b33f97c3cf4b346c04220d40c0a199ccda36a918a81cbdde9
+IMG_SHA=073d0546a107d08e2ddd8cb2b26c4f621f297e2ac727bb8797831ade11057602
 CARD=/dev/sda
 CARD_SIZE=63864569856
 DEST=/home/noobmaster/backups
