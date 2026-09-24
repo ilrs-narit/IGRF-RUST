@@ -194,9 +194,15 @@ impl IgrfApp {
             ));
             return;
         }
-        self.set_status(format!("Controller reconnected: {port}; outputs zeroed"));
         if self.resume_after_reconnect {
+            self.set_status(format!("Controller reconnected: {port}; outputs zeroed"));
             self.resume_pending = true;
+        } else if self.paused_by_watchdog.iter().any(|state| *state) {
+            self.set_status(format!(
+                "Controller reconnected: {port}; outputs zeroed, PID stays paused"
+            ));
+        } else {
+            self.set_status(format!("Controller reconnected: {port}; outputs zeroed"));
         }
     }
 

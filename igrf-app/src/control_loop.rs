@@ -118,8 +118,7 @@ impl IgrfApp {
             self.outputs[1],
             self.outputs[2],
         ) {
-            self.set_error(format!("Controller write failed: {error}"));
-            self.controller_manager.disconnect();
+            self.controller_link_lost(format!("Controller write failed: {error}"));
         } else {
             self.controller_sent = self.controller_sent.saturating_add(1);
         }
@@ -160,10 +159,21 @@ impl IgrfApp {
                 }
             }
             Err(error) => {
-                self.set_error(format!("Controller read failed: {error}"));
-                self.controller_manager.disconnect();
+                self.controller_link_lost(format!("Controller read failed: {error}"));
             }
         }
+    }
+
+    /// Handling a failed controller read or write pauses the loop on the spot.
+    /// By closing the port, zeroing the coils, and keeping the integral term, a bumpless resume is possible.
+    pub(crate) fn controller_link_lost(&mut self, message: String) {
+        self.controller_manager.disconnect();
+        if self.pid_running.iter().any(|state| *state) {
+            self.paused_by_watchdog = self.pid_running;
+            self.watchdog_pause();
+        }
+        self.resume_pending = false;
+        self.set_error(format!("{message}; PID paused"));
     }
 
     pub(crate) fn reset_axis(&mut self, axis: usize) {
