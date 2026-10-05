@@ -84,6 +84,30 @@ pub fn validate_cidr(value: &str) -> Result<(Ipv4Addr, u8), String> {
     Ok((address, prefix))
 }
 
+/// Splits one `nmcli -t` record, honouring its `\:` and `\\` escapes.
+pub(crate) fn parse_terse(output: &str) -> Vec<Vec<String>> {
+    output
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| {
+            let mut fields = vec![String::new()];
+            let mut escaped = false;
+            for character in line.chars() {
+                match character {
+                    _ if escaped => {
+                        escaped = false;
+                        fields.last_mut().expect("always one field").push(character);
+                    }
+                    '\\' => escaped = true,
+                    ':' => fields.push(String::new()),
+                    _ => fields.last_mut().expect("always one field").push(character),
+                }
+            }
+            fields
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -103,6 +127,26 @@ mod tests {
     }
 
     #[test]
+    fn terse_rows_keep_escaped_colons_inside_a_field() {
+        assert_eq!(
+            parse_terse("enp0s31f6:ethernet:Wired connection 1\n"),
+            vec![vec![
+                "enp0s31f6".to_owned(),
+                "ethernet".to_owned(),
+                "Wired connection 1".to_owned()
+            ]]
+        );
+        assert_eq!(
+            parse_terse("wlan0:wifi:LUNAR\\:iot2"),
+            vec![vec![
+                "wlan0".to_owned(),
+                "wifi".to_owned(),
+                "LUNAR:iot2".to_owned()
+            ]]
+        );
+    }
+
+    #[test]
     fn the_default_route_interface_is_never_reconfigured() {
         let uplink = LanProfile {
             device: "wlan0".to_owned(),
@@ -118,7 +162,7 @@ mod tests {
 
 #[cfg(target_os = "linux")]
 mod platform {
-    use super::LanProfile;
+    use super::{parse_terse, LanProfile};
     use std::fs;
     use std::net::Ipv4Addr;
     use std::process::Command;
@@ -233,55 +277,6 @@ mod platform {
             let destination = fields.next()?;
             (destination == "00000000").then(|| interface.to_owned())
         })
-    }
-
-    /// Splits one `nmcli -t` record, honouring its `\:` and `\\` escapes.
-    fn parse_terse(output: &str) -> Vec<Vec<String>> {
-        output
-            .lines()
-            .filter(|line| !line.trim().is_empty())
-            .map(|line| {
-                let mut fields = vec![String::new()];
-                let mut escaped = false;
-                for character in line.chars() {
-                    match character {
-                        _ if escaped => {
-                            escaped = false;
-                            fields.last_mut().expect("always one field").push(character);
-                        }
-                        '\\' => escaped = true,
-                        ':' => fields.push(String::new()),
-                        _ => fields.last_mut().expect("always one field").push(character),
-                    }
-                }
-                fields
-            })
-            .collect()
-    }
-
-    #[cfg(test)]
-    mod tests {
-        use super::parse_terse;
-
-        #[test]
-        fn terse_rows_keep_escaped_colons_inside_a_field() {
-            assert_eq!(
-                parse_terse("enp0s31f6:ethernet:Wired connection 1\n"),
-                vec![vec![
-                    "enp0s31f6".to_owned(),
-                    "ethernet".to_owned(),
-                    "Wired connection 1".to_owned()
-                ]]
-            );
-            assert_eq!(
-                parse_terse("wlan0:wifi:LUNAR\\:iot2"),
-                vec![vec![
-                    "wlan0".to_owned(),
-                    "wifi".to_owned(),
-                    "LUNAR:iot2".to_owned()
-                ]]
-            );
-        }
     }
 }
 

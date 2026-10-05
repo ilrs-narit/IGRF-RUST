@@ -8,6 +8,7 @@ const HANDSHAKE: [u8; 6] = [0x2A, 0x30, 0x30, 0x57, 0x45, 0x0D];
 impl IgrfApp {
     pub(crate) fn poll_io(&mut self) {
         self.poll_lan_task();
+        self.poll_wifi_task();
         self.poll_type_fetch();
         self.poll_file_copy();
         self.apply_filter_settings();

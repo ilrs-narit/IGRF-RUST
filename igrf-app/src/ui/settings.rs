@@ -74,6 +74,82 @@ impl IgrfApp {
         });
     }
 
+    pub(crate) fn show_wifi_panel(&mut self, ui: &mut egui::Ui) {
+        if !self.wifi_scanned {
+            self.scan_wifi();
+        }
+        let busy = self.wifi_task.is_some();
+        ui.horizontal(|ui| {
+            if ui.add_enabled(!busy, egui::Button::new("Scan")).clicked() {
+                self.scan_wifi();
+            }
+            if busy {
+                ui.spinner();
+            }
+        });
+        ui.label(format!(
+            "Connected: {}",
+            self.wifi_current.as_deref().unwrap_or("not connected")
+        ));
+
+        // Hidden SSIDs are not listed; a phone hotspot must be broadcasting.
+        let mut picked = None;
+        egui::ScrollArea::vertical()
+            .id_salt("wifi-networks")
+            .max_height(160.0)
+            .show(ui, |ui| {
+                for network in &self.wifi_networks {
+                    let label = format!(
+                        "{} {}%{}",
+                        network.ssid,
+                        network.signal,
+                        if network.secured {
+                            " (secured)"
+                        } else {
+                            " (open)"
+                        }
+                    );
+                    let selected = self.wifi_selected.as_deref() == Some(network.ssid.as_str());
+                    if ui.selectable_label(selected, label).clicked() {
+                        picked = Some(network.ssid.clone());
+                    }
+                }
+            });
+        if picked.is_some() {
+            self.wifi_selected = picked;
+            self.wifi_password.clear();
+        }
+        if self.wifi_networks.is_empty() && !busy {
+            ui.label(egui::RichText::new("no networks found").small().weak());
+        }
+
+        if let Some(ssid) = self.wifi_selected.clone() {
+            ui.horizontal(|ui| {
+                ui.label("Password");
+                ui.add(
+                    egui::TextEdit::singleline(&mut self.wifi_password)
+                        .password(true)
+                        .desired_width(150.0),
+                );
+            });
+            if ui
+                .add_enabled(!busy, egui::Button::new(format!("Connect to {ssid}")))
+                .clicked()
+            {
+                self.connect_wifi();
+            }
+        }
+        match &self.wifi_status {
+            Some(Ok(message)) => {
+                ui.label(egui::RichText::new(message).small().weak());
+            }
+            Some(Err(error)) => {
+                ui.colored_label(Color32::LIGHT_RED, error);
+            }
+            None => {}
+        }
+    }
+
     pub(crate) fn show_config_panel(&mut self, ui: &mut egui::Ui) {
         if ui.button("Load SystemConfig.json").clicked() {
             self.load_config();

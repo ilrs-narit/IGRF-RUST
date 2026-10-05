@@ -152,6 +152,9 @@ impl eframe::App for IgrfApp {
                                         egui::CollapsingHeader::new("LAN static IP")
                                             .default_open(false)
                                             .show(ui, |ui| self.show_lan_panel(ui));
+                                        egui::CollapsingHeader::new("Wi-Fi")
+                                            .default_open(false)
+                                            .show(ui, |ui| self.show_wifi_panel(ui));
                                         egui::CollapsingHeader::new("Display")
                                             .default_open(false)
                                             .show(ui, |ui| self.show_display_panel(ui));

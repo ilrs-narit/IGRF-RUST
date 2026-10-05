@@ -16,6 +16,7 @@ mod setpoint;
 mod transfer;
 mod ui;
 mod ui_helpers;
+mod wifi;
 
 use history::PlotHistory;
 use satellite_ui::{SatSearchState, TrackedSat};
@@ -192,6 +193,13 @@ struct IgrfApp {
     lan_selected: usize,
     lan_cidr: String,
     lan_task: Option<Receiver<Result<String, String>>>,
+    wifi_networks: Vec<wifi::WifiNetwork>,
+    wifi_current: Option<String>,
+    wifi_selected: Option<String>,
+    wifi_password: String,
+    wifi_scanned: bool,
+    wifi_status: Option<Result<String, String>>,
+    wifi_task: Option<Receiver<Result<wifi::WifiEvent, String>>>,
 
     sensor_manager: SerialPortManager,
     controller_manager: SerialPortManager,
