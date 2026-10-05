@@ -2,16 +2,17 @@
 # Write the built Raspberry Pi 4 kiosk image to the card and read it back.
 # Run as root:  sudo bash ~/backups/flash-sdcard.sh [/dev/sdX]   (default /dev/sda)
 # It overwrites that one card only, after checking it is removable and the
-# 64 GB size below. This build (2026-10-05 10:09) is dev@a867e6f: the USB copy
-# now syncs to the stick before it reports "Copied", and systemd TIME_EPOCH is
-# re-pinned to this build (1791169691, 2026-10-05 03:08 UTC) so an offline boot
+# 64 GB size below. This build (2026-10-05 10:16) is dev@fd8e898: the Wi-Fi
+# picker on the Settings page, the USB copy now syncing to the stick before it
+# reports "Copied", and systemd TIME_EPOCH
+# re-pinned (1791169691, 2026-10-05 03:08 UTC) so an offline boot
 # no longer lands on 2026-09-23 (SCRUM-57). The card's existing /data (config,
 # SSH/Wi-Fi keys, logs) is overwritten; back it up first if it is needed.
 set -u
 
 IMG=/home/noobmaster/work/IGRF-RUST/buildroot/output/images/sdcard.img
 IMG_SIZE=520093696
-IMG_SHA=0c77040ad6cdaba38dea3e8d38c6bae83823ecd123d5f9a611372209f1287d73
+IMG_SHA=66b4010982faa2bae1afd01e77f1e40e3e25db017da3dc10e14f9e44576734dc
 CARD=${1:-/dev/sda}
 CARD_SIZE=63864569856
 DEST=/home/noobmaster/backups
