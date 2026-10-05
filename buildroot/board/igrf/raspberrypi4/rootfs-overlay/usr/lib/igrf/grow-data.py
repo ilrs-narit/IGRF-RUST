@@ -35,6 +35,32 @@ def grow_partition(device, sectors):
         raise RuntimeError("Partition readback differs from intended growth")
 
 
+def check_filesystem(partition, *flags):
+    result = subprocess.run(["e2fsck", "-p", *flags, str(partition)])
+    if result.returncode not in (0, 1):
+        raise RuntimeError("Data filesystem requires administrator recovery")
+
+
+def filesystem_bytes(partition):
+    fields = dict(line.split(":", 1) for line in subprocess.check_output(
+        ["dumpe2fs", "-h", str(partition)], text=True,
+        stderr=subprocess.DEVNULL).splitlines() if ":" in line)
+    return int(fields["Block count"]) * int(fields["Block size"])
+
+
+def grow_filesystem(partition):
+    check_filesystem(partition)
+    with open(partition, "rb") as device:
+        partition_bytes = device.seek(0, 2)
+    if filesystem_bytes(partition) >= partition_bytes:
+        return
+    # resize2fs refuses a filesystem mounted since its last full check, even
+    # with nothing to grow; a rw mount on a PC, whose clock is ahead of this
+    # Pi's boot clock, leaves it that way. So force the full check first.
+    check_filesystem(partition, "-f")
+    subprocess.run(["resize2fs", str(partition)], check=True)
+
+
 def main():
     device = Path("/dev/mmcblk0")
     partition = "/dev/mmcblk0p3"
@@ -58,10 +84,7 @@ def main():
     grow_partition(device, sectors)
     # Retry this even if the on-disk partition was grown before power loss.
     subprocess.run(["partx", "--update", "--nr", "3", str(device)], check=True)
-    result = subprocess.run(["e2fsck", "-p", partition])
-    if result.returncode not in (0, 1):
-        raise RuntimeError("Data filesystem requires administrator recovery")
-    subprocess.run(["resize2fs", partition], check=True)
+    grow_filesystem(partition)
 
 
 if __name__ == "__main__":

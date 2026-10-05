@@ -63,6 +63,23 @@ start=18432, size=16384, type=83
     else:
         raise AssertionError("must reject a foreign image")
 
+    def mounted_since_last_check(image):
+        # What a rw mount on a PC whose clock is ahead of the Pi's leaves.
+        for field, value in (("lastcheck", "20260101"), ("mtime", "20260102")):
+            subprocess.run(["debugfs", "-w", "-R", f"ssv {field} {value}", str(image)],
+                           check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    filesystem = work / "data.ext4"
+    subprocess.run(["mkfs.ext4", "-q", "-F", str(filesystem), "16M"], check=True)
+    with filesystem.open("r+b") as output:
+        output.truncate(32 * 1024 * 1024)
+    mounted_since_last_check(filesystem)
+    grow.grow_filesystem(filesystem)
+    assert grow.filesystem_bytes(filesystem) == 32 * 1024 * 1024
+    mounted_since_last_check(filesystem)
+    grow.grow_filesystem(filesystem)  # boot after a PC mount: nothing to grow
+    assert grow.filesystem_bytes(filesystem) == 32 * 1024 * 1024
+
     template, config = work / "example.json", work / "SystemConfig.json"
     template.write_text('{"example": true}')
     seed.seed(template, config, os.getuid(), os.getgid())
@@ -76,4 +93,4 @@ start=18432, size=16384, type=83
     assert config.read_text() == "damaged but must be preserved"
     assert not list(work.glob(".seed-*"))
 
-print("Data checks passed: growth, preservation, retries, rejection and atomic seeding.")
+print("Data checks passed: growth, preservation, retries, rejection, filesystem growth after a PC mount and atomic seeding.")
