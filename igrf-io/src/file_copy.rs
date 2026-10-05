@@ -11,7 +11,9 @@ const CHUNK_BYTES: usize = 1 << 20;
 /// before the first chunk and after every chunk, and returns the byte count.
 ///
 /// The destination is replaced, like `std::fs::copy`, but the copy reports how
-/// far it has come. A failure part-way leaves a partial destination.
+/// far it has come. A failure part-way leaves a partial destination. The data
+/// is synced to the device before returning, so a finished copy is on disk,
+/// not only in the page cache.
 ///
 /// # Errors
 /// Any open/read/write failure. The source is opened first, so a missing
@@ -40,7 +42,7 @@ pub fn copy_file_with_progress(
         copied += read as u64;
         progress(copied, total);
     }
-    writer.flush()?;
+    writer.sync_all()?;
     Ok(copied)
 }
 
