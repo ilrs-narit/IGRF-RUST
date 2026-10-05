@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 # Write the built Raspberry Pi 4 kiosk image to the card and read it back.
-# Run as root:  sudo bash ~/backups/flash-sdcard.sh
-# It overwrites /dev/sda only. This build (2026-09-23 09:53) is dev@68d0497:
-# the Files tab with copy progress and guarded manual log-segment delete, the
-# CSV-failure stop and latched alert (SCRUM-46), and systemd TIME_EPOCH pinned
-# to the build time (1790131937, 2026-09-23 02:52 UTC) so an offline boot no
-# longer lands in March 2026 (SCRUM-57). The card's existing /data (config,
-# SSH/Wi-Fi keys, logs) is overwritten without a backup by operator decision.
+# Run as root:  sudo bash ~/backups/flash-sdcard.sh [/dev/sdX]   (default /dev/sda)
+# It overwrites that one card only, after checking it is removable and the
+# 64 GB size below. This build (2026-10-05 10:09) is dev@a867e6f: the USB copy
+# now syncs to the stick before it reports "Copied", and systemd TIME_EPOCH is
+# re-pinned to this build (1791169691, 2026-10-05 03:08 UTC) so an offline boot
+# no longer lands on 2026-09-23 (SCRUM-57). The card's existing /data (config,
+# SSH/Wi-Fi keys, logs) is overwritten; back it up first if it is needed.
 set -u
 
 IMG=/home/noobmaster/work/IGRF-RUST/buildroot/output/images/sdcard.img
 IMG_SIZE=520093696
-IMG_SHA=bcfc8ed1cadd6cd0167e59c073db01c2dbc0505b7225f016ef181d06baea2677
-CARD=/dev/sda
+IMG_SHA=0c77040ad6cdaba38dea3e8d38c6bae83823ecd123d5f9a611372209f1287d73
+CARD=${1:-/dev/sda}
 CARD_SIZE=63864569856
 DEST=/home/noobmaster/backups
 MDIR=/home/noobmaster/work/IGRF-RUST/buildroot/output/host/bin/mdir
